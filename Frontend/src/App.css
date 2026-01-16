@@ -1742,3 +1742,156 @@ h1, h2, h3, h4, h5, h6 {
 .mt-lg { margin-top: var(--spacing-lg); }
 
 .w-full { width: 100%; }
+
+/* =============================
+   HOME – PREMIUM VISUAL UPGRADE
+   ============================= */
+
+.premium-bg {
+  position: relative;
+  background:
+    radial-gradient(800px 400px at 20% 0%, rgba(120, 90, 255, 0.12), transparent 60%),
+    radial-gradient(600px 300px at 90% 20%, rgba(255, 140, 200, 0.10), transparent 60%);
+}
+
+.home-hero {
+  position: relative;
+  padding: 4rem 2rem 2rem;
+  text-align: center;
+}
+
+.hero-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255,255,255,0.08), transparent 70%);
+  pointer-events: none;
+}
+
+.home-title {
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.home-subtitle {
+  margin-top: 0.5rem;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+}
+
+.home-content {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.premium-card {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 20px;
+  padding: 2rem;
+  backdrop-filter: blur(24px);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+}
+
+.premium-tabs {
+  margin-bottom: 1.5rem;
+}
+
+.premium-drop {
+  border: 2px dashed rgba(255,255,255,0.25);
+  padding: 3rem;
+  border-radius: 18px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.premium-drop:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.4);
+}
+
+.drop-icon {
+  font-size: 2.5rem;
+}
+
+.drop-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+
+.drop-hint {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.file-confirm {
+  font-weight: 600;
+  color: #7dffb3;
+}
+
+.section-title {
+  font-size: 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.5rem;
+}
+
+.config-item label {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--text-secondary);
+}
+
+.config-item select,
+.job-inputs input,
+.job-inputs textarea {
+  width: 100%;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  color: white;
+}
+
+.voice-toggle button {
+  flex: 1;
+  padding: 0.6rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.voice-toggle button.active {
+  background: linear-gradient(135deg, #8b7bff, #ff8bd5);
+  color: black;
+  font-weight: 700;
+}
+
+.start-interview-btn {
+  margin-top: 1rem;
+  padding: 1rem;
+  font-size: 1.2rem;
+  font-weight: 800;
+  border-radius: 16px;
+  border: none;
+  cursor: pointer;
+  background: linear-gradient(135deg, #8b7bff, #ff8bd5);
+  color: black;
+  box-shadow: 0 15px 40px rgba(139,123,255,0.4);
+}
+
+.start-interview-btn:hover {
+  transform: translateY(-2px);
+}
+
