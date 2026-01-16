@@ -1,59 +1,163 @@
 /* src/services/GeminiService.js */
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// 🚨 DEVELOPER SWITCH: Set to TRUE to save your API Quota
+const FORCE_MOCK_MODE = true; 
+
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
-if (!API_KEY) {
-  console.error("CRITICAL ERROR: API Key is missing.");
+// --- 1. EXPANDED MOCK DATABASE ---
+const MOCK_DB = {
+  "Graphic Design": [
+    "Explain the importance of Color Theory in UI design.",
+    "What is the difference between Raster and Vector graphics?",
+    "How do you approach creating a visual hierarchy?",
+    "Explain the difference between UX and UI.",
+    "What tools do you use for prototyping and why?"
+  ],
+  "Machine Learning": [
+    "What is the difference between Supervised and Unsupervised learning?",
+    "Explain the concept of Overfitting and how to prevent it.",
+    "What is a Confusion Matrix?",
+    "Explain the difference between L1 and L2 regularization.",
+    "What is the vanishing gradient problem?"
+  ],
+  "MERN Stack": [
+    "Explain the Event Loop in Node.js.",
+    "How does React's Virtual DOM differ from the Real DOM?",
+    "What is Middleware in Express.js?",
+    "Explain the difference between SQL and MongoDB.",
+    "How do you manage state in a large React application?"
+  ],
+  "Frontend": [
+    "What are React Hooks and why do we use them?",
+    "Explain the concept of 'Hoisting' in JavaScript.",
+    "What is the difference between CSS Grid and Flexbox?",
+    "Explain the Box Model in CSS.",
+    "What is the purpose of the 'useEffect' hook?"
+  ],
+  "Backend": [
+    "What is a RESTful API?",
+    "Explain the difference between authentication and authorization.",
+    "How do you handle database transactions?",
+    "What is Caching and when should you use it?",
+    "Explain the difference between Horizontal and Vertical scaling."
+  ],
+  "General": [
+    "Tell me about a challenging project you worked on.",
+    "What are your greatest strengths as a developer?",
+    "How do you handle tight deadlines?",
+    "Describe a time you had a conflict with a team member."
+  ]
+};
+
+const FEEDBACK_VARIATIONS = [
+  { positive: "Great clarity and confidence.", improve: "Try to be more concise." },
+  { positive: "Excellent technical depth.", improve: "You used some filler words, try to pause instead." },
+  { positive: "Good structure to your answer.", improve: "Include a real-world example next time." },
+  { positive: "You covered the key points well.", improve: "Speak a bit louder and with more energy." }
+];
+
+// --- 2. SMARTER TOPIC MATCHING & NO REPEATS ---
+const getMockQuestion = (topic, previousQuestions = []) => {
+  const lowerTopic = topic.toLowerCase();
+  let category = "General";
+  
+  // Keyword matching logic
+  if (lowerTopic.includes("design") || lowerTopic.includes("ui") || lowerTopic.includes("ux") || lowerTopic.includes("graphic")) {
+    category = "Graphic Design";
+  } else if (lowerTopic.includes("learning") || lowerTopic.includes("ml") || lowerTopic.includes("ai") || lowerTopic.includes("data")) {
+    category = "Machine Learning";
+  } else if (lowerTopic.includes("mern") || lowerTopic.includes("full") || lowerTopic.includes("stack")) {
+    category = "MERN Stack";
+  } else if (lowerTopic.includes("react") || lowerTopic.includes("front") || lowerTopic.includes("web")) {
+    category = "Frontend";
+  } else if (lowerTopic.includes("node") || lowerTopic.includes("back") || lowerTopic.includes("sql") || lowerTopic.includes("db")) {
+    category = "Backend";
+  }
+
+  return getRandomUniqueFrom(category, previousQuestions);
+};
+
+// 🔥 FIXED: No Repeats Logic
+const getRandomUniqueFrom = (category, previousQuestions) => {
+  const allQuestions = MOCK_DB[category];
+  
+  // Filter out questions that have ALREADY been asked
+  const availableQuestions = allQuestions.filter(q => !previousQuestions.includes(q));
+
+  // If we ran out of questions, reset and use the full list (rare fallback)
+  const pool = availableQuestions.length > 0 ? availableQuestions : allQuestions;
+
+  return pool[Math.floor(Math.random() * pool.length)];
+};
+
+const getMockFeedback = () => {
+  const base = FEEDBACK_VARIATIONS[Math.floor(Math.random() * FEEDBACK_VARIATIONS.length)];
+  const randomScore = Math.floor(Math.random() * (9 - 6 + 1)) + 6; // Score 6-9
+  return { ...base, score: randomScore };
+};
+
+// --- REAL API STUFF ---
+const genAI = new GoogleGenerativeAI(API_KEY || "mock-key");
+const MODELS_TO_TRY = ["gemini-3-flash-preview", "gemini-2.0-flash-exp", "gemini-1.5-flash"];
+
+async function tryGenerateWithFallback(prompt) {
+  if (FORCE_MOCK_MODE) throw new Error("Force Mock Mode");
+
+  for (const modelName of MODELS_TO_TRY) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      return response.text();
+    } catch (error) {
+      console.warn(`⚠️ ${modelName} failed.`);
+    }
+  }
+  throw new Error("All API models failed.");
 }
 
-const genAI = new GoogleGenerativeAI(API_KEY);
-
-// 1. THIS FUNCTION PRINTS AVAILABLE MODELS TO YOUR CONSOLE
-export const checkAvailableModels = async () => {
+export const generateQuestion = async (topic, previousQuestions = []) => {
   try {
-    // We try to fetch the list of models
-    // Note: We use the generic 'genAI' instance, not a specific model yet.
-    // However, the SDK doesn't expose listModels easily in the browser sometimes.
-    // So we will try a "Safety Test" with the most likely 2026 model.
+    const historyText = previousQuestions.length > 0 ? `Do NOT ask: ${JSON.stringify(previousQuestions)}.` : "";
     
-    const modelsToTry = ["gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-pro", "gemini-1.0-pro"];
+    // 🔥 IMPROVED PROMPT: Handles filenames gracefully
+    const prompt = `
+      You are a technical interviewer. 
+      The user wants to practice for an interview based on this input: "${topic}".
+      
+      Instructions:
+      1. If the input looks like a job title (e.g. "React Dev"), ask a technical question about it.
+      2. If the input is a filename (e.g. "resume.pdf" or "unknown"), ignore it and ask a "General Software Engineering" question instead.
+      3. ${historyText}
+      4. Keep it short (under 20 words). Return ONLY the question.
+    `;
     
-    console.log("🔍 TESTING MODELS...");
-
-    for (const modelName of modelsToTry) {
-      try {
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent("Hello");
-        console.log(`✅ SUCCESS! Model '${modelName}' is working!`);
-        return modelName; // Return the first one that works
-      } catch (e) {
-        console.log(`❌ Failed '${modelName}':`, e.message);
-      }
-    }
-    
-    console.error("💀 ALL MODELS FAILED. Check API Key permissions.");
-    return null;
+    return await tryGenerateWithFallback(prompt);
   } catch (error) {
-    console.error("Check Models Error:", error);
+    console.log("Using Mock Question for Topic:", topic);
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // 🔥 PASS HISTORY TO MOCK FUNCTION
+    return getMockQuestion(topic || "General", previousQuestions);
   }
 };
 
-// 2. Default export (We default to 1.5-flash for now)
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-export const generateQuestion = async (topic) => {
-  // Run the check first to see what's broken
-  await checkAvailableModels(); 
-
-  const prompt = `Generate one viva question about ${topic}. Keep it short.`;
-  const result = await model.generateContent(prompt);
-  return result.response.text();
-};
-
-export const evaluateAnswer = async (q, a) => {
-  const prompt = `Grade this answer. Q: ${q} A: ${a}. Return JSON {score: number, feedback: string}`;
-  const result = await model.generateContent(prompt);
-  const text = result.response.text().replace(/```json|```/g, "").trim();
-  return JSON.parse(text);
+export const evaluateAnswer = async (question, userAnswer) => {
+  try {
+    const prompt = `
+      Question: "${question}" 
+      Answer: "${userAnswer}" 
+      Grade 1-10. Split feedback into "positive" and "improve".
+      Return STRICT JSON: { "score": number, "positive": "text", "improve": "text" }
+    `;
+    const text = await tryGenerateWithFallback(prompt);
+    const cleanText = text.replace(/```json|```/g, "").trim();
+    return JSON.parse(cleanText);
+  } catch (error) {
+    console.log("Using Mock Grading");
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    return getMockFeedback();
+  }
 };

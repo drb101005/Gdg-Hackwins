@@ -1,75 +1,121 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 function Settings() {
-  const [language, setLanguage] = useState('en');
-  const [voiceType, setVoiceType] = useState('female');
+  // 1. Initialize State
   const [notifications, setNotifications] = useState(true);
-  const [darkMode, setDarkMode] = useState(true);
+  const [emailNotifications, setEmailNotifications] = useState(false);
+  
+  const [darkMode, setDarkMode] = useState(() => {
+     const saved = localStorage.getItem('ace_theme');
+     return saved ? JSON.parse(saved) : true;
+  });
 
-  const languages = [
-    { code: 'en', label: 'English 🇺🇸' },
-    { code: 'fr', label: 'French 🇫🇷' },
-    { code: 'de', label: 'German 🇩🇪' }
-  ];
+  // 2. THE FIX: Update CSS Variables for Global Theme Switching
+  useEffect(() => {
+    const root = document.documentElement;
+    
+    if (!darkMode) {
+      // ☀️ LIGHT MODE: Override variables
+      root.style.setProperty('--bg-primary', '#ffffff');
+      root.style.setProperty('--bg-secondary', '#f8fafc'); 
+      root.style.setProperty('--bg-card', '#ffffff');
+      root.style.setProperty('--bg-glass', 'rgba(0, 0, 0, 0.03)');
+      root.style.setProperty('--text-primary', '#0f172a'); 
+      root.style.setProperty('--text-secondary', '#475569'); 
+      root.style.setProperty('--text-muted', '#94a3b8');
+      root.style.setProperty('--border-color', '#e2e8f0'); 
+    } else {
+      // 🌙 DARK MODE: Reset to defaults
+      root.style.removeProperty('--bg-primary');
+      root.style.removeProperty('--bg-secondary');
+      root.style.removeProperty('--bg-card');
+      root.style.removeProperty('--bg-glass');
+      root.style.removeProperty('--text-primary');
+      root.style.removeProperty('--text-secondary');
+      root.style.removeProperty('--text-muted');
+      root.style.removeProperty('--border-color');
+    }
+    
+    localStorage.setItem('ace_theme', JSON.stringify(darkMode));
+  }, [darkMode]);
 
   const handleSave = () => {
-    // Mock save
-    alert('Settings saved successfully!');
+    // Optional: Visual feedback
+    const btn = document.querySelector('.save-btn');
+    if(btn) {
+       const originalText = btn.textContent;
+       btn.textContent = "Saved!";
+       btn.style.backgroundColor = "var(--accent-green)";
+       setTimeout(() => {
+         btn.textContent = originalText;
+         btn.style.backgroundColor = "";
+       }, 2000);
+    }
   };
 
   return (
     <div className="settings-page">
       <header className="page-header">
         <h1 className="page-title">Settings</h1>
-        <p className="page-subtitle">Customize your interview experience</p>
+        <p className="page-subtitle">Manage your account and app preferences</p>
       </header>
 
       <div className="settings-content">
+        
+        {/* --- NEW SECTION: Account & Profile --- */}
         <div className="settings-section card-glass">
-          <h3 className="settings-title">Interview Preferences</h3>
+          <h3 className="settings-title">Account & Profile</h3>
 
           <div className="setting-item">
             <div className="setting-info">
-              <label className="setting-label">Default Language</label>
-              <p className="setting-description">Select the language for your interview sessions</p>
+              <label className="setting-label">Display Name</label>
+              <p className="setting-description">Your public profile name</p>
             </div>
-            <select
-              className="form-select"
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-            >
-              {languages.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.label}
-                </option>
-              ))}
-            </select>
+            <input 
+              type="text" 
+              defaultValue="Demo User" 
+              className="form-input" 
+              style={{ width: '200px', textAlign: 'right' }} 
+            />
           </div>
 
           <div className="setting-item">
             <div className="setting-info">
-              <label className="setting-label">AI Voice</label>
-              <p className="setting-description">Choose your preferred AI interviewer voice</p>
+              <label className="setting-label">Email Address</label>
+              <p className="setting-description">Contact email for notifications</p>
             </div>
-            <div className="voice-toggle">
-              <button
-                className={`voice-option ${voiceType === 'male' ? 'active' : ''}`}
-                onClick={() => setVoiceType('male')}
-              >
-                🎙️ Male
-              </button>
-              <button
-                className={`voice-option ${voiceType === 'female' ? 'active' : ''}`}
-                onClick={() => setVoiceType('female')}
-              >
-                🎙️ Female
-              </button>
+            <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>user@example.com</span>
+          </div>
+
+          <div className="setting-item">
+            <div className="setting-info">
+              <label className="setting-label">Current Plan</label>
+              <p className="setting-description">You are currently on the Free tier</p>
             </div>
+            <span className="hero-badge" style={{ color: 'var(--accent-green)', borderColor: 'var(--accent-green)' }}>
+              Free Plan
+            </span>
           </div>
         </div>
 
+        {/* --- App Preferences --- */}
         <div className="settings-section card-glass">
           <h3 className="settings-title">App Preferences</h3>
+
+          <div className="setting-item">
+            <div className="setting-info">
+              <label className="setting-label">Dark Mode</label>
+              <p className="setting-description">Toggle between dark and light themes</p>
+            </div>
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={darkMode}
+                onChange={(e) => setDarkMode(e.target.checked)}
+              />
+              <span className="toggle-slider"></span>
+            </label>
+          </div>
 
           <div className="setting-item">
             <div className="setting-info">
@@ -88,46 +134,22 @@ function Settings() {
 
           <div className="setting-item">
             <div className="setting-info">
-              <label className="setting-label">Dark Mode</label>
-              <p className="setting-description">Enable dark theme (recommended)</p>
+              <label className="setting-label">Email Digests</label>
+              <p className="setting-description">Receive weekly performance summaries</p>
             </div>
             <label className="toggle-switch">
               <input
                 type="checkbox"
-                checked={darkMode}
-                onChange={(e) => setDarkMode(e.target.checked)}
+                checked={emailNotifications}
+                onChange={(e) => setEmailNotifications(e.target.checked)}
               />
               <span className="toggle-slider"></span>
             </label>
           </div>
         </div>
 
-        <div className="settings-section card-glass">
-          <h3 className="settings-title">Account</h3>
-
-          <div className="setting-item">
-            <div className="setting-info">
-              <label className="setting-label">Email</label>
-              <p className="setting-description">user@example.com</p>
-            </div>
-            <button className="btn btn-secondary">Change</button>
-          </div>
-
-          <div className="setting-item">
-            <div className="setting-info">
-              <label className="setting-label">Password</label>
-              <p className="setting-description">Last changed 30 days ago</p>
-            </div>
-            <button className="btn btn-secondary">Update</button>
-          </div>
-        </div>
-
+        {/* Save Button */}
         <button className="btn btn-glow save-btn" onClick={handleSave}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-            <polyline points="17,21 17,13 7,13 7,21"/>
-            <polyline points="7,3 7,8 15,8"/>
-          </svg>
           Save Changes
         </button>
       </div>

@@ -1,16 +1,33 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import FeedbackModal from '../components/FeedbackModal';
 import useVoiceRecognition from '../hooks/useVoiceRecognition';
 import { generateQuestion, evaluateAnswer } from '../services/GeminiService';
-import { VoiceWaveLoader, AIThinkingLoader } from '../components/Loader'; 
+import '../styles/Animations.css';
 
 function Interview() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const chatEndRef = useRef(null);
+  const hasStarted = useRef(false);
+
+  // --- CONFIGURATION ---
+  const TOTAL_QUESTIONS = 10;
+  const SESSION_DURATION = 900; // 15 Minutes in seconds
+  const TOPIC = location.state?.topic || "React JS"; 
+  const [voiceType] = useState(localStorage.getItem('ace_voice') || 'female');
+  const [langCode] = useState(localStorage.getItem('ace_lang') || 'en');
+
+  // --- STATE ---
   const [messages, setMessages] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState("");
+  const [askedQuestions, setAskedQuestions] = useState([]); 
   const [questionCount, setQuestionCount] = useState(0);
   const [textInput, setTextInput] = useState('');
-  const [timer, setTimer] = useState(0);
+  
+  // New: Countdown Timer State
+  const [timeLeft, setTimeLeft] = useState(SESSION_DURATION);
+  
   const [showFeedback, setShowFeedback] = useState(false);
   const [currentFeedback, setCurrentFeedback] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -20,51 +37,109 @@ function Interview() {
     transcript,
     startListening,
     stopListening,
-    resetTranscript,
-    isSupported
+    resetTranscript
   } = useVoiceRecognition();
 
-  const TOTAL_QUESTIONS = 10;
-  // TODO: In the future, pass this topic dynamically from the Home page
-  const TOPIC = "React JS"; 
-
-  // --- Effects ---
-
-  // Initial Load: Get First Question
+  // --- 1. COUNTDOWN TIMER LOGIC ---
   useEffect(() => {
-    fetchNextQuestion();
-  }, []);
-
-  // Timer
-  useEffect(() => {
-    const interval = setInterval(() => setTimer((prev) => prev + 1), 1000);
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          alert("Time is up! Submitting interview...");
+          navigate('/dashboard'); // Auto-end
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [navigate]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    // Add warning color if time is low (< 2 mins)
+    return {
+      text: `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`,
+      isLow: seconds < 120
+    };
   };
 
-  // --- Logic ---
+  // --- 2. AI VOICE LOGIC ---
+const speakText = (text) => {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel(); // Stop previous audio
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    
+    // Map simplified codes to BCP 47 tags (Browser standard)
+    const langMap = {
+      'en': 'en-US',
+      'fr': 'fr-FR',
+      'de': 'de-DE'
+    };
+    const targetLang = langMap[langCode] || 'en-US';
+
+    // 🔍 STEP 1: Filter voices by the selected LANGUAGE
+    let availableVoices = voices.filter(v => v.lang.startsWith(langCode));
+    
+    // Fallback: If no specific language voices found (rare), use all voices
+    if (availableVoices.length === 0) availableVoices = voices;
+
+    // 🔍 STEP 2: Filter by GENDER (Male/Female)
+    // Browsers often put "Google US English Female" or "Microsoft David" (Male)
+    let selectedVoice = availableVoices.find(v => 
+      v.name.toLowerCase().includes(voiceType === 'male' ? 'male' : 'female') ||
+      // Common Windows/Google names for Male
+      (voiceType === 'male' && (v.name.includes('David') || v.name.includes('Mark') || v.name.includes('Google') && !v.name.includes('Female'))) ||
+      // Common names for Female
+      (voiceType === 'female' && (v.name.includes('Zira') || v.name.includes('Samantha') || v.name.includes('Female')))
+    );
+
+    // 🚨 Fallback: If we couldn't match gender, just take the first voice in that language
+    if (!selectedVoice) selectedVoice = availableVoices[0];
+
+    // Apply settings
+    if (selectedVoice) utterance.voice = selectedVoice;
+    utterance.lang = targetLang;
+    utterance.rate = 1.0; 
+    utterance.pitch = voiceType === 'male' ? 0.9 : 1.1; // Slight pitch tweak for effect
+
+    console.log(`🗣️ Speaking in ${targetLang} using voice: ${selectedVoice?.name}`);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  useEffect(() => {
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.type === 'ai') {
+      speakText(lastMsg.text);
+    }
+  }, [messages]);
+
+  // --- 3. SCROLL & START LOGIC ---
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isProcessing, isListening, transcript]);
+
+  useEffect(() => {
+    if (!hasStarted.current) {
+      fetchNextQuestion();
+      hasStarted.current = true;
+    }
+  }, []);
 
   const fetchNextQuestion = async () => {
     setIsProcessing(true);
     try {
-      // Add a temporary "AI Thinking" bubble while fetching
-      setMessages(prev => [...prev, { type: 'ai-loader' }]);
-      
-      const q = await generateQuestion(TOPIC);
-      
-      // Remove loader and add real question
-      setMessages(prev => prev.filter(msg => msg.type !== 'ai-loader'));
+      const q = await generateQuestion(TOPIC, askedQuestions);
       setCurrentQuestion(q);
+      setAskedQuestions(prev => [...prev, q]);
       setMessages(prev => [...prev, { type: 'ai', text: q }]);
       setQuestionCount(prev => prev + 1);
     } catch (error) {
       console.error(error);
-      setMessages(prev => prev.filter(msg => msg.type !== 'ai-loader'));
     } finally {
       setIsProcessing(false);
     }
@@ -80,32 +155,24 @@ function Interview() {
   };
 
   const handleSubmitAnswer = async (answerText) => {
-    // If no text provided, use the voice transcript
+    window.speechSynthesis.cancel(); // Stop AI if it's still talking
+    setCurrentFeedback(null); 
+    
     if (!answerText) answerText = transcript;
     if (!answerText || !answerText.trim()) return;
 
     if (isListening) stopListening();
 
-    // 1. Show User Answer Immediately
     setMessages(prev => [...prev, { type: 'user', text: answerText }]);
     setTextInput('');
     setIsProcessing(true);
 
-    // 2. Add AI Loader Bubble
-    setMessages(prev => [...prev, { type: 'ai-loader' }]);
-
     try {
-      // 3. Get Grade from Gemini
       const result = await evaluateAnswer(currentQuestion, answerText);
-      
-      // 4. Remove Loader
-      setMessages(prev => prev.filter(msg => msg.type !== 'ai-loader'));
-      
       setCurrentFeedback(result);
       setShowFeedback(true);
     } catch (error) {
       console.error("Grading failed", error);
-      setMessages(prev => prev.filter(msg => msg.type !== 'ai-loader'));
     } finally {
       setIsProcessing(false);
     }
@@ -117,177 +184,140 @@ function Interview() {
     if (questionCount < TOTAL_QUESTIONS) {
       fetchNextQuestion();
     } else {
-      // Ideally, navigate to /analytics here
-      alert("Interview Complete! Redirecting to Analytics...");
+      alert("Interview Complete! Great job.");
+      navigate('/dashboard');
     }
   };
 
   const progressPercent = (questionCount / TOTAL_QUESTIONS) * 100;
+  const questionsLeft = TOTAL_QUESTIONS - questionCount;
+  const timeObj = formatTime(timeLeft);
 
   return (
     <div className="interview-container" style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', height: '100vh', display: 'flex', flexDirection: 'column' }}>
       
-      {/* --- Header --- */}
+      {/* Header */}
       <header className="interview-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <div className="status-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#00FF88', fontWeight: 'bold' }}>
-          <span style={{ fontSize: '1.2rem', animation: 'pulse 2s infinite' }}>●</span> 
-          Live Session
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <div className="status-badge" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#00FF88', fontWeight: 'bold' }}>
+            <span className="pulse-dot"></span> Live Session
+          </div>
+          <span style={{ fontSize: '0.8rem', color: '#888' }}>Topic: {TOPIC}</span>
         </div>
-        <div className="timer" style={{ fontSize: '1.2rem', fontFamily: 'monospace' }}>{formatTime(timer)}</div>
-        <Link to="/dashboard" className="btn-secondary" style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #333', color: 'white', textDecoration: 'none', fontSize: '0.9rem' }}>
+
+        {/* TIMER DISPLAY */}
+        <div className="timer" style={{ 
+          fontSize: '1.4rem', 
+          fontFamily: 'monospace', 
+          fontWeight: 'bold',
+          color: timeObj.isLow ? '#ff4444' : 'white',
+          border: `1px solid ${timeObj.isLow ? '#ff4444' : '#333'}`,
+          padding: '5px 15px',
+          borderRadius: '8px',
+          background: timeObj.isLow ? 'rgba(255, 68, 68, 0.1)' : 'transparent'
+        }}>
+          {timeObj.text}
+        </div>
+
+        <Link to="/dashboard" className="btn-secondary" style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid #333', color: 'white', textDecoration: 'none' }}>
           End Session
         </Link>
       </header>
 
-      {/* --- Progress Bar --- */}
+      {/* Progress & Questions Left */}
       <div className="progress-bar-container" style={{ marginBottom: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.9rem', color: '#888' }}>
-          <span>Question {questionCount} of {TOTAL_QUESTIONS}</span>
-          <span>{Math.round(progressPercent)}%</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.9rem', color: '#ccc' }}>
+            <span style={{ color: '#007BFF', fontWeight: 'bold' }}>Question {questionCount} / {TOTAL_QUESTIONS}</span>
+            <span style={{ color: questionsLeft === 0 ? '#ff4444' : '#888' }}>
+               {questionsLeft === 0 ? "Last Question!" : `${questionsLeft} questions left`}
+            </span>
         </div>
-        <div style={{ width: '100%', height: '6px', background: '#222', borderRadius: '3px', overflow: 'hidden' }}>
-          <div style={{ width: `${progressPercent}%`, height: '100%', background: '#007BFF', borderRadius: '3px', transition: 'width 0.5s ease' }}></div>
+        <div style={{ width: '100%', height: '8px', background: '#222', borderRadius: '4px', overflow: 'hidden' }}>
+          <div style={{ width: `${progressPercent}%`, height: '100%', background: 'linear-gradient(90deg, #007BFF, #00FF88)', borderRadius: '4px', transition: 'width 0.5s ease' }}></div>
         </div>
       </div>
 
-      {/* --- Chat Window --- */}
-      <div className="chat-window" style={{ 
-        flex: 1, 
-        overflowY: 'auto', 
-        marginBottom: '20px', 
-        display: 'flex', 
-        flexDirection: 'column', 
-        gap: '20px',
-        paddingRight: '10px'
-      }}>
-        {messages.map((msg, index) => {
-          if (msg.type === 'ai-loader') {
-            return (
-               <div key={index} className="message ai" style={{ alignSelf: 'flex-start', maxWidth: '80%' }}>
-                  <div style={{ marginBottom: '5px', fontSize: '0.8rem', color: '#007BFF', fontWeight: 'bold' }}>🤖 AI Interviewer</div>
-                  <div style={{ background: 'rgba(0, 123, 255, 0.1)', padding: '15px', borderRadius: '0 12px 12px 12px', border: '1px solid rgba(0, 123, 255, 0.3)' }}>
-                    <AIThinkingLoader />
-                  </div>
-               </div>
-            );
-          }
-
-          return (
-            <div key={index} className={`message ${msg.type}`} style={{
-              alignSelf: msg.type === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '80%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: msg.type === 'user' ? 'flex-end' : 'flex-start'
-            }}>
-              <div style={{ marginBottom: '5px', fontSize: '0.8rem', color: msg.type === 'user' ? '#888' : '#007BFF', fontWeight: 'bold' }}>
-                {msg.type === 'ai' ? '🤖 AI Interviewer' : '👤 You'}
-              </div>
-              <div style={{
-                background: msg.type === 'user' ? '#2A2A2A' : 'rgba(0, 123, 255, 0.1)',
-                padding: '15px',
-                borderRadius: msg.type === 'user' ? '12px 0 12px 12px' : '0 12px 12px 12px',
-                border: msg.type === 'ai' ? '1px solid rgba(0, 123, 255, 0.3)' : '1px solid #444',
-                color: 'white',
-                lineHeight: '1.5'
-              }}>
-                {msg.text}
-              </div>
+      {/* Chat Window */}
+      <div className="chat-window" style={{ flex: 1, overflowY: 'auto', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '20px', paddingRight: '10px' }}>
+        {messages.map((msg, index) => (
+          <div key={index} className={`message ${msg.type}`} style={{
+            alignSelf: msg.type === 'user' ? 'flex-end' : 'flex-start',
+            maxWidth: '80%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: msg.type === 'user' ? 'flex-end' : 'flex-start'
+          }}>
+            <div style={{ marginBottom: '5px', fontSize: '0.8rem', color: msg.type === 'user' ? '#888' : '#007BFF', fontWeight: 'bold' }}>
+              {msg.type === 'ai' ? '🤖 AI Interviewer' : '👤 You'}
             </div>
-          );
-        })}
+            <div style={{
+              background: msg.type === 'user' ? '#2A2A2A' : 'rgba(0, 123, 255, 0.1)',
+              padding: '15px',
+              borderRadius: msg.type === 'user' ? '12px 0 12px 12px' : '0 12px 12px 12px',
+              border: msg.type === 'ai' ? '1px solid rgba(0, 123, 255, 0.3)' : '1px solid #444',
+              color: 'white',
+              lineHeight: '1.5'
+            }}>
+              {msg.text}
+            </div>
+          </div>
+        ))}
 
-        {/* Live Voice Preview Bubble */}
+        {/* Live Speech Preview Bubble */}
         {isListening && (
            <div className="message user preview" style={{ alignSelf: 'flex-end', maxWidth: '80%' }}>
-             <div style={{ background: 'transparent', border: '1px dashed #00FF88', padding: '10px', borderRadius: '12px', color: '#00FF88', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <VoiceWaveLoader /> 
+             <div style={{ 
+               background: 'rgba(0, 255, 136, 0.1)', 
+               border: '1px dashed #00FF88', 
+               padding: '15px', 
+               borderRadius: '12px 0 12px 12px', 
+               color: '#00FF88', 
+               display: 'flex', 
+               alignItems: 'center', 
+               gap: '10px' 
+             }}>
+                <div className="typing-indicator"><span></span><span></span><span></span></div>
                 {transcript || "Listening..."}
              </div>
            </div>
         )}
+
+        {/* AI Thinking Animation */}
+        {isProcessing && (
+           <div className="message ai" style={{ alignSelf: 'flex-start' }}>
+              <div style={{ marginBottom: '5px', fontSize: '0.8rem', color: '#007BFF', fontWeight: 'bold' }}>🤖 AI Interviewer</div>
+              <div className="typing-indicator">
+                <span></span><span></span><span></span>
+              </div>
+           </div>
+        )}
+        
+        <div ref={chatEndRef} />
       </div>
 
-      {/* --- Controls Footer --- */}
-      <div className="controls" style={{ 
-        display: 'flex', 
-        gap: '15px', 
-        alignItems: 'center',
-        background: 'rgba(20, 20, 20, 0.8)',
-        backdropFilter: 'blur(10px)',
-        padding: '20px',
-        borderRadius: '20px',
-        border: '1px solid #333'
-      }}>
-        
-        {/* Microphone Button */}
-        <button 
-          onClick={toggleRecording}
-          disabled={isProcessing}
-          style={{
-            width: '60px', height: '60px', borderRadius: '50%', border: 'none',
-            background: isListening ? '#ff4444' : (isProcessing ? '#333' : '#007BFF'),
-            color: 'white', fontSize: '24px', cursor: isProcessing ? 'not-allowed' : 'pointer',
-            boxShadow: isListening ? '0 0 20px rgba(255, 68, 68, 0.5)' : '0 0 0 transparent',
-            transition: 'all 0.3s ease',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}
-        >
-          {isListening ? (
-             // Simple Stop Icon
-             <div style={{ width: '20px', height: '20px', background: 'white', borderRadius: '4px' }} />
-          ) : (
-             // Mic Icon
-             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
-          )}
+      {/* Controls */}
+      <div className="controls" style={{ display: 'flex', gap: '15px', alignItems: 'center', background: 'rgba(20,20,20,0.8)', padding: '20px', borderRadius: '20px', border: '1px solid #333' }}>
+        <button onClick={toggleRecording} disabled={isProcessing} className={`mic-button ${isListening ? 'listening' : ''}`}>
+          {isListening ? <div className="stop-square"></div> : <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>}
         </button>
 
-        {/* Text Input */}
-        <div style={{ flex: 1, position: 'relative' }}>
-          <input
-            type="text"
-            value={textInput}
-            onChange={(e) => setTextInput(e.target.value)}
-            disabled={isProcessing || isListening}
-            placeholder={isListening ? "Listening..." : "Type your answer if mic fails..."}
-            onKeyPress={(e) => e.key === 'Enter' && handleSubmitAnswer(textInput)}
-            style={{ 
-              width: '100%', 
-              padding: '15px 20px', 
-              borderRadius: '30px', 
-              border: '1px solid #444', 
-              background: '#2A2A2A', 
-              color: 'white',
-              outline: 'none',
-              fontSize: '1rem'
-            }}
-          />
-        </div>
-        
-        {/* Send Button */}
-        <button 
-          onClick={() => handleSubmitAnswer(textInput)}
-          disabled={isProcessing || (!textInput && !transcript)}
-          style={{ 
-            padding: '15px', 
-            borderRadius: '50%', 
-            background: (!textInput && !transcript) ? '#333' : '#00FF88', 
-            color: 'black', 
-            border: 'none', 
-            cursor: (!textInput && !transcript) ? 'not-allowed' : 'pointer',
-            transition: 'background 0.3s'
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-        </button>
-      </div>
-
-      {/* Feedback Modal */}
-      {showFeedback && currentFeedback && (
-        <FeedbackModal 
-          feedback={currentFeedback} 
-          onNext={handleNextQuestion} 
+        <input
+          type="text"
+          value={textInput}
+          onChange={(e) => setTextInput(e.target.value)}
+          disabled={isProcessing || isListening}
+          placeholder={isListening ? "Listening..." : "Type your answer..."}
+          style={{ flex: 1, padding: '15px', borderRadius: '30px', border: '1px solid #444', background: '#2A2A2A', color: 'white', outline: 'none' }}
+          onKeyPress={(e) => e.key === 'Enter' && handleSubmitAnswer(textInput)}
         />
+        
+        <button onClick={() => handleSubmitAnswer(textInput)} disabled={isProcessing} style={{ padding: '15px', borderRadius: '50%', background: '#00FF88', color: 'black', border: 'none', cursor: 'pointer' }}>
+          ➤
+        </button>
+      </div>
+
+      {showFeedback && currentFeedback && (
+        <FeedbackModal feedback={currentFeedback} onNext={handleNextQuestion} />
       )}
     </div>
   );

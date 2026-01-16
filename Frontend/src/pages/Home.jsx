@@ -17,8 +17,44 @@ function Home() {
     }
   };
 
-  const handleStart = () => {
-    navigate("/interview");
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.currentTarget.classList.add('drag-over');
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drag-over');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setFileName(e.dataTransfer.files[0].name);
+    }
+  };
+
+  // --- UPDATED START LOGIC ---
+    const handleStart = () => {
+    let topic = "General Interview";
+    
+    // Topic Logic
+    if (activeTab === 'job') {
+      if (jobTitle) topic = jobTitle;
+      else if (jobDescription) topic = "Technical Interview based on Job Description"; 
+      else if (targetCompany) topic = `${targetCompany} Interview`;
+    } else if (activeTab === 'resume' && fileName) {
+      topic = fileName; // Use filename for keyword matching
+    } else {
+      topic = "Resume Based Interview";
+    }
+
+    // ⚡ CRITICAL: Save Language & Voice to Storage so Interview.jsx can read it
+    localStorage.setItem('ace_lang', language);
+    localStorage.setItem('ace_voice', voiceType);
+
+    navigate('/interview', { state: { topic: topic } });
   };
 
   return (
