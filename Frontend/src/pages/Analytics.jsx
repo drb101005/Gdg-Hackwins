@@ -6,9 +6,13 @@ function Analytics() {
   const totalSessions = 28;
   const improvementPercent = 23;
 
-  // Calculate stroke offset for score ring
-  const circumference = 377;
-  const offset = circumference - (avgScore / 10) * circumference;
+  // --- MATH FOR THE RING ---
+  // Box is 180x180. Center is 90,90.
+  // Radius = 70 (Fits nicely with 12px stroke)
+  const radius = 70;
+  const circumference = 2 * Math.PI * radius; // ~440
+  // Calculate how much "empty" space should be left
+  const strokeDashoffset = circumference - (avgScore / 10) * circumference;
 
   return (
     <div className="analytics-page">
@@ -19,46 +23,67 @@ function Analytics() {
 
       <div className="analytics-content">
         <div className="analytics-grid">
+          
+          {/* --- SCORE CARD --- */}
           <div className="analytics-card card-glass score-card">
             <h3>Average Score</h3>
-            <div className="score-ring large">
-              <svg width="180" height="180" viewBox="0 0 180 180">
+            
+            <div className="score-ring large" style={{ position: 'relative', width: '180px', height: '180px', margin: '0 auto' }}>
+              <svg width="180" height="180" viewBox="0 0 180 180" style={{ transform: 'rotate(-90deg)' }}>
                 <defs>
-                  <linearGradient id="analyticsGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" stopColor="var(--accent-blue)" />
-                    <stop offset="100%" stopColor="var(--accent-green)" />
+                  <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#007BFF" />
+                    <stop offset="100%" stopColor="#00FF88" />
                   </linearGradient>
                 </defs>
+
+                {/* 1. Background Track (Dark Grey) */}
                 <circle
-                  className="score-ring-bg"
                   cx="90"
                   cy="90"
-                  r="75"
+                  r={radius}
                   fill="none"
-                  stroke="var(--bg-secondary)"
-                  strokeWidth="10"
+                  stroke="rgba(255, 255, 255, 0.1)"
+                  strokeWidth="12"
                 />
+
+                {/* 2. Completion Bar (Colored) */}
                 <circle
-                  className="score-ring-progress"
                   cx="90"
                   cy="90"
-                  r="75"
+                  r={radius}
                   fill="none"
-                  stroke="url(#analyticsGradient)"
-                  strokeWidth="10"
+                  stroke="url(#ringGradient)" 
+                  strokeWidth="12"
                   strokeLinecap="round"
-                  strokeDasharray="471"
-                  strokeDashoffset={471 - (avgScore / 10) * 471}
-                  style={{ transform: 'rotate(-90deg)', transformOrigin: 'center' }}
+                  strokeDasharray={circumference}
+                  strokeDashoffset={strokeDashoffset}
+                  style={{ transition: 'stroke-dashoffset 1s ease-out' }}
                 />
               </svg>
-              <div className="score-value">
-                <span className="score-number large">{avgScore}</span>
-                <span className="score-label">out of 10</span>
+
+              {/* Text Center Overlay */}
+              <div className="score-value" style={{ 
+                position: 'absolute', 
+                top: 0, left: 0, width: '100%', height: '100%', 
+                display: 'flex', flexDirection: 'column', 
+                alignItems: 'center', justifyContent: 'center' 
+              }}>
+                <span className="score-number large" style={{ 
+                  fontSize: '3rem', 
+                  fontWeight: '800', 
+                  background: 'linear-gradient(135deg, #007BFF 0%, #00FF88 100%)', 
+                  WebkitBackgroundClip: 'text', 
+                  WebkitTextFillColor: 'transparent' 
+                }}>
+                  {avgScore}
+                </span>
+                <span className="score-label" style={{ color: '#888', marginTop: '-5px' }}>out of 10</span>
               </div>
             </div>
           </div>
 
+          {/* QUESTIONS CARD */}
           <div className="analytics-card card-glass">
             <h3>Questions Answered</h3>
             <div className="stat-display">
@@ -73,6 +98,7 @@ function Analytics() {
             </div>
           </div>
 
+          {/* SESSIONS CARD */}
           <div className="analytics-card card-glass">
             <h3>Total Sessions</h3>
             <div className="stat-display">
@@ -87,6 +113,7 @@ function Analytics() {
             </div>
           </div>
 
+          {/* IMPROVEMENT CARD */}
           <div className="analytics-card card-glass">
             <h3>Improvement</h3>
             <div className="stat-display">
@@ -96,45 +123,41 @@ function Analytics() {
           </div>
         </div>
 
+        {/* CHART SECTION */}
         <div className="chart-section card-glass">
           <h3>Performance Over Time</h3>
           <div className="chart-placeholder">
             <svg width="100%" height="200" viewBox="0 0 600 200" preserveAspectRatio="none">
               <defs>
-                <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="var(--accent-blue)" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="var(--accent-blue)" stopOpacity="0" />
+                <linearGradient id="chartFill" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stopColor="#007BFF" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="#007BFF" stopOpacity="0" />
                 </linearGradient>
               </defs>
-              {/* Grid lines */}
-              <line x1="0" y1="50" x2="600" y2="50" stroke="var(--border-color)" strokeDasharray="4" />
-              <line x1="0" y1="100" x2="600" y2="100" stroke="var(--border-color)" strokeDasharray="4" />
-              <line x1="0" y1="150" x2="600" y2="150" stroke="var(--border-color)" strokeDasharray="4" />
+              
+              {/* Grid Lines */}
+              <line x1="0" y1="50" x2="600" y2="50" stroke="rgba(255,255,255,0.1)" strokeDasharray="4" />
+              <line x1="0" y1="100" x2="600" y2="100" stroke="rgba(255,255,255,0.1)" strokeDasharray="4" />
+              <line x1="0" y1="150" x2="600" y2="150" stroke="rgba(255,255,255,0.1)" strokeDasharray="4" />
 
-              {/* Area fill */}
+              {/* Area */}
               <path
                 d="M0,150 L100,120 L200,140 L300,100 L400,80 L500,60 L600,40 L600,200 L0,200 Z"
-                fill="url(#chartGradient)"
+                fill="url(#chartFill)"
               />
 
               {/* Line */}
               <path
                 d="M0,150 L100,120 L200,140 L300,100 L400,80 L500,60 L600,40"
                 fill="none"
-                stroke="var(--accent-blue)"
+                stroke="#007BFF"
                 strokeWidth="3"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
 
-              {/* Data points */}
-              <circle cx="0" cy="150" r="5" fill="var(--accent-blue)" />
-              <circle cx="100" cy="120" r="5" fill="var(--accent-blue)" />
-              <circle cx="200" cy="140" r="5" fill="var(--accent-blue)" />
-              <circle cx="300" cy="100" r="5" fill="var(--accent-blue)" />
-              <circle cx="400" cy="80" r="5" fill="var(--accent-blue)" />
-              <circle cx="500" cy="60" r="5" fill="var(--accent-blue)" />
-              <circle cx="600" cy="40" r="6" fill="var(--accent-green)" stroke="var(--bg-primary)" strokeWidth="2" />
+              {/* Dot */}
+              <circle cx="600" cy="40" r="6" fill="#00FF88" stroke="#fff" strokeWidth="2" />
             </svg>
             <div className="chart-labels">
               <span>Week 1</span>
