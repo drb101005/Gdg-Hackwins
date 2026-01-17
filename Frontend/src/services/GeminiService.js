@@ -2,7 +2,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // 🚨 DEVELOPER SWITCH: Set to TRUE to save your API Quota
-const FORCE_MOCK_MODE = true; 
+const FORCE_MOCK_MODE = false; 
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
