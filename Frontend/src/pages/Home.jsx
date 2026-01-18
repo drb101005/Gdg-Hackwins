@@ -64,7 +64,7 @@ function Home() {
         <div className="hero-glow" />
         <h1 className="home-title">Ace.Ai</h1>
         <p className="home-subtitle">
-          Train your voice, Test your clarity, Get brutally honest feedback.
+          Train your voice. Test your clarity. Get brutally honest feedback.
         </p>
       </section>
 
