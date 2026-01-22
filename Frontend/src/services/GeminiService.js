@@ -2,20 +2,26 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // 🚨 DEVELOPER SWITCH: Set to TRUE to save your API Quota
-const FORCE_MOCK_MODE = false; 
+const FORCE_MOCK_MODE = true; 
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 // --- 1. EXPANDED MOCK DATABASE ---
 const MOCK_DB = {
-  "Graphic Design": [
-    "Explain the importance of Color Theory in UI design.",
-    "What is the difference between Raster and Vector graphics?",
-    "How do you approach creating a visual hierarchy?",
-    "Explain the difference between UX and UI.",
-    "What tools do you use for prototyping and why?"
-  ],
-  "Machine Learning": [
+"Android": [
+  "What is Android?",
+  "Explain the Android activity lifecycle.",
+  "What is an Activity?",
+  "What is the difference between Activity and Fragment?",
+  "What is an APK file?",
+  "What is an Intent and how is it used?",
+  "What is Android Studio?",
+  "What is the difference between implicit and explicit intents?",
+  "How do you store data locally in an Android app?",
+  "What is the Android Manifest file used for?"
+],
+
+   "Machine Learning": [
     "What is the difference between Supervised and Unsupervised learning?",
     "Explain the concept of Overfitting and how to prevent it.",
     "What is a Confusion Matrix?",
@@ -64,8 +70,8 @@ const getMockQuestion = (topic, previousQuestions = []) => {
   let category = "General";
   
   // Keyword matching logic
-  if (lowerTopic.includes("design") || lowerTopic.includes("ui") || lowerTopic.includes("ux") || lowerTopic.includes("graphic")) {
-    category = "Graphic Design";
+  if (lowerTopic.includes("andriod") || lowerTopic.includes("ui") || lowerTopic.includes("ux") || lowerTopic.includes("android")) {
+    category = "Android";
   } else if (lowerTopic.includes("learning") || lowerTopic.includes("ml") || lowerTopic.includes("ai") || lowerTopic.includes("data")) {
     category = "Machine Learning";
   } else if (lowerTopic.includes("mern") || lowerTopic.includes("full") || lowerTopic.includes("stack")) {
@@ -124,14 +130,19 @@ export const generateQuestion = async (topic, previousQuestions = []) => {
     
     // 🔥 IMPROVED PROMPT: Handles filenames gracefully
     const prompt = `
-      You are a technical interviewer. 
-      The user wants to practice for an interview based on this input: "${topic}".
-      
-      Instructions:
-      1. If the input looks like a job title (e.g. "React Dev"), ask a technical question about it.
-      2. If the input is a filename (e.g. "resume.pdf" or "unknown"), ignore it and ask a "General Software Engineering" question instead.
-      3. ${historyText}
-      4. Keep it short (under 20 words). Return ONLY the question.
+      Role: Senior Technical Interviewer.
+      Task: Ask one technical question based on Topic: "${topic}".
+
+      Logic:
+      1. If Topic is a job title (e.g., "React Dev"), ask a relevant technical question.
+      2. If Topic is a filename or "unknown", ask a "General Software Engineering" question.
+      3. Difficulty: Start "Easy". Analyze {historyText}: if the user's last answer was correct/confident, increase difficulty; if incorrect/hesitant, decrease difficulty or stay easy.
+
+      Constraints:
+      - Response MUST be ONLY the question. 
+      - Maximum 20 words.
+      - No introductory fluff ("Okay," "Great," "Next question is...").
+      - Tone: Professional and direct.
     `;
     
     return await tryGenerateWithFallback(prompt);
