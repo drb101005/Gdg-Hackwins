@@ -1,82 +1,76 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 function Signup() {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    // Mock signup - navigate to home
-    navigate('/home');
+    navigate("/home");
   };
 
   return (
-    <div className="auth-page">
-      <div className="auth-container">
-        <Link to="/" className="logo auth-logo">
-          <div className="logo-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-              <path d="M2 17l10 5 10-5"/>
-              <path d="M2 12l10 5 10-5"/>
-            </svg>
-          </div>
-          Ace.ai
+    <div className="auth-modern">
+
+      <div className="auth-card-modern">
+
+        <Link to="/" className="auth-logo-modern">
+          InterviewLab
         </Link>
 
-        <div className="auth-card card-glass">
-          <h2 className="auth-title">Create Account</h2>
-          <p className="auth-subtitle">Start your interview practice journey</p>
+        <h2>Create account</h2>
+        <p className="auth-subtitle-modern">
+          Start building your interview confidence.
+        </p>
 
-          <form className="auth-form" onSubmit={handleSubmit}>
-            <div className="form-group">
-              <label className="form-label">Full Name</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Enter your name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="auth-form-modern">
 
-            <div className="form-group">
-              <label className="form-label">Email</label>
-              <input
-                type="email"
-                className="form-input"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
+          <label>Full Name</label>
+          <input
+            type="text"
+            className="input-modern"
+            placeholder="Enter your full name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
 
-            <div className="form-group">
-              <label className="form-label">Password</label>
-              <input
-                type="password"
-                className="form-input"
-                placeholder="Create a password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
+          <label>Email</label>
+          <input
+            type="email"
+            className="input-modern"
+            placeholder="Enter your email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
 
-            <button type="submit" className="btn btn-glow w-full">
-              Create Account
-            </button>
-          </form>
+          <label>Password</label>
+          <input
+            type="password"
+            className="input-modern"
+            placeholder="Create a password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
 
-          <p className="auth-footer">
-            Already have an account? <Link to="/login" className="auth-link">Sign In</Link>
-          </p>
-        </div>
+          <button type="submit" className="btn-primary-modern w-full-modern">
+            Create Account
+          </button>
+
+        </form>
+
+        <p className="auth-footer-modern">
+          Already have an account?{" "}
+          <Link to="/login" className="auth-link-modern">
+            Sign in
+          </Link>
+        </p>
+
       </div>
     </div>
   );

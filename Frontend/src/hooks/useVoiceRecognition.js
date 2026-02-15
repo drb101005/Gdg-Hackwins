@@ -1,85 +1,116 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from "react";
 
-const useVoiceRecognition = () => {
+const useVoiceRecognition = (language = "en-US") => {
   const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState('');
+  const [transcript, setTranscript] = useState("");
+  const [error, setError] = useState(null);
+
   const recognitionRef = useRef(null);
+  const isListeningRef = useRef(false); // Prevent stale closure bug
 
   useEffect(() => {
-    // 1. Check browser support safely
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (typeof window === "undefined") return;
+
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
+      setError("Speech Recognition not supported in this browser.");
       console.error("⚠️ Browser does not support Speech Recognition.");
       return;
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = true;      // Keep listening even if user pauses
-    recognition.interimResults = true;  // Show words as they are spoken
-    recognition.lang = 'en-US';         // Default to English
 
-    // 2. Handle Results
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = language;
+
+    // Handle results
     recognition.onresult = (event) => {
-      let currentTranscript = '';
+      let interimTranscript = "";
+      let finalTranscript = "";
+
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        currentTranscript += event.results[i][0].transcript;
+        const text = event.results[i][0].transcript;
+
+        if (event.results[i].isFinal) {
+          finalTranscript += text + " ";
+        } else {
+          interimTranscript += text;
+        }
       }
-      setTranscript(currentTranscript);
+
+      setTranscript((prev) => prev + finalTranscript + interimTranscript);
     };
 
-    // 3. Handle Errors (Crucial for debugging)
+    // Handle errors
     recognition.onerror = (event) => {
       console.error("🎤 Speech Recognition Error:", event.error);
-      setIsListening(false); // Turn off button if error occurs
+      setError(event.error);
+
+      if (event.error === "not-allowed") {
+        alert("Microphone permission denied. Please allow mic access.");
+      }
+
+      setIsListening(false);
+      isListeningRef.current = false;
     };
 
-    // 4. Handle End (Restart if we didn't mean to stop)
+    // Auto-restart if Chrome stops unexpectedly
     recognition.onend = () => {
-      // If we are supposed to be listening but it stopped, restart it.
-      // (Commented out to prevent infinite loops for now, safer for demo)
-      // if (isListening) recognition.start(); 
-      setIsListening(false);
+      if (isListeningRef.current) {
+        try {
+          recognition.start();
+        } catch (err) {
+          console.log("Restart prevented:", err);
+        }
+      }
     };
 
     recognitionRef.current = recognition;
 
-    // Cleanup
     return () => {
-      if (recognitionRef.current) recognitionRef.current.stop();
+      recognition.stop();
     };
+  }, [language]);
+
+  const startListening = useCallback(() => {
+    if (!recognitionRef.current) return;
+
+    if (isListeningRef.current) return; // Prevent double start
+
+    try {
+      recognitionRef.current.start();
+      setIsListening(true);
+      isListeningRef.current = true;
+      setError(null);
+      console.log("🎤 Listening started...");
+    } catch (err) {
+      console.error("⚠️ Failed to start recognition:", err);
+    }
   }, []);
 
-  const startListening = () => {
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.start();
-        setIsListening(true);
-        console.log("🎤 Listening started...");
-      } catch (error) {
-        console.error("⚠️ Failed to start recognition:", error);
-      }
-    }
-  };
+  const stopListening = useCallback(() => {
+    if (!recognitionRef.current) return;
 
-  const stopListening = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-      console.log("🛑 Listening stopped.");
-    }
-  };
+    recognitionRef.current.stop();
+    setIsListening(false);
+    isListeningRef.current = false;
+    console.log("🛑 Listening stopped.");
+  }, []);
 
-  const resetTranscript = () => {
-    setTranscript('');
-  };
+  const resetTranscript = useCallback(() => {
+    setTranscript("");
+  }, []);
 
   return {
     isListening,
     transcript,
+    error,
     startListening,
     stopListening,
-    resetTranscript
+    resetTranscript,
   };
 };
 

@@ -1,30 +1,31 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const mockScheduled = [
   {
     id: 1,
-    type: 'Technical Interview',
-    date: '2026-01-15',
-    time: '10:00 AM',
-    location: 'Google Meet'
+    type: "Technical Interview",
+    date: "2026-01-15",
+    time: "10:00 AM",
+    location: "Google Meet",
   },
   {
     id: 2,
-    type: 'Behavioral Interview',
-    date: '2026-01-16',
-    time: '2:00 PM',
-    location: 'Zoom'
-  }
+    type: "Behavioral Interview",
+    date: "2026-01-16",
+    time: "2:00 PM",
+    location: "Zoom",
+  },
 ];
 
 function ScheduledInterviews() {
-  const navigate = useNavigate(); // Initialize hook
+  const navigate = useNavigate();
+
   const [scheduled, setScheduled] = useState(mockScheduled);
-  const [type, setType] = useState('');
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('');
-  const [location, setLocation] = useState('');
+  const [type, setType] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [location, setLocation] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -35,129 +36,126 @@ function ScheduledInterviews() {
       type,
       date,
       time,
-      location: location || 'Virtual'
+      location: location || "Virtual",
     };
 
     setScheduled([...scheduled, newSession]);
-    setType('');
-    setDate('');
-    setTime('');
-    setLocation('');
-    alert("Session Scheduled Successfully!");
+    setType("");
+    setDate("");
+    setTime("");
+    setLocation("");
   };
 
-  // --- NEW FUNCTION: Handle Start Button ---
   const handleStartSession = (session) => {
-    // Navigate to the interview page
-    // Pass the "type" (e.g., "Technical Interview") as the topic state
-    navigate('/interview', { state: { topic: session.type } });
+    navigate("/interview", { state: { topic: session.type } });
   };
 
   const formatDate = (dateStr) => {
-    if (!dateStr) return '';
+    if (!dateStr) return "";
     const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    return d.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
   };
 
   return (
-    <div className="scheduled-page">
-      <header className="page-header">
-        <h1 className="page-title">Scheduled Interviews</h1>
-        <p className="page-subtitle">Plan and manage your mock interview sessions</p>
-      </header>
+    <div className="scheduled-modern">
 
-      <div className="scheduled-content">
-        {/* Schedule Form */}
-        <div className="schedule-form card-glass" style={{ position: 'relative', zIndex: 10 }}>
-          <h3 className="form-title">Schedule New Session</h3>
+      <div className="scheduled-header-modern">
+        <h1>Scheduled Sessions</h1>
+        <p>Plan your mock interviews and launch them when ready.</p>
+      </div>
 
-          <form onSubmit={handleSubmit}>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Interview Type</label>
-                <select
-                  className="form-select"
-                  value={type}
-                  onChange={(e) => setType(e.target.value)}
-                  required
-                  style={{ backgroundColor: '#222', color: 'white' }}
-                >
-                  <option value="">Select type...</option>
-                  <option value="Technical Interview">Technical Interview</option>
-                  <option value="Behavioral Interview">Behavioral Interview</option>
-                  <option value="System Design">System Design</option>
-                </select>
-              </div>
+      {/* FORM */}
+      <div className="card-modern">
+        <h3>Schedule a new session</h3>
 
-              <div className="form-group">
-                <label className="form-label">Date</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  required
-                  style={{ colorScheme: 'dark' }} 
-                />
-              </div>
+        <form onSubmit={handleSubmit} className="scheduled-form-modern">
+
+          <div className="form-row-modern">
+            <div>
+              <label className="label-modern">Interview Type</label>
+              <select
+                className="input-modern"
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+                required
+              >
+                <option value="">Select type</option>
+                <option value="Technical Interview">Technical Interview</option>
+                <option value="Behavioral Interview">Behavioral Interview</option>
+                <option value="System Design">System Design</option>
+              </select>
             </div>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Time</label>
-                <input
-                  type="time"
-                  className="form-input"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                  required
-                  style={{ colorScheme: 'dark' }}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Location</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. Zoom"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                />
-              </div>
+            <div>
+              <label className="label-modern">Date</label>
+              <input
+                type="date"
+                className="input-modern"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                required
+              />
             </div>
-
-            <button type="submit" className="btn btn-glow" style={{ marginTop: '15px', cursor: 'pointer' }}>
-              Schedule Interview
-            </button>
-          </form>
-        </div>
-
-        {/* Upcoming Sessions List */}
-        <div className="upcoming-section">
-          <h3 className="section-title">Upcoming Sessions</h3>
-          <div className="upcoming-list">
-            {scheduled.map((session) => (
-              <div key={session.id} className="upcoming-card card-glass">
-                <div className="upcoming-date">
-                  <span className="date-day">{formatDate(session.date)}</span>
-                  <span className="date-time">{session.time}</span>
-                </div>
-                <div className="upcoming-info">
-                  <span className="upcoming-type">{session.type}</span>
-                  <span className="upcoming-location">{session.location}</span>
-                </div>
-                {/* CONNECTED START BUTTON */}
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={() => handleStartSession(session)}
-                >
-                  Start
-                </button>
-              </div>
-            ))}
           </div>
-        </div>
+
+          <div className="form-row-modern">
+            <div>
+              <label className="label-modern">Time</label>
+              <input
+                type="time"
+                className="input-modern"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                required
+              />
+            </div>
+
+            <div>
+              <label className="label-modern">Location</label>
+              <input
+                type="text"
+                className="input-modern"
+                placeholder="Zoom / Meet / Virtual"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <button type="submit" className="btn-primary-modern">
+            Schedule Session
+          </button>
+
+        </form>
+      </div>
+
+      {/* LIST */}
+      <div className="scheduled-list-modern">
+
+        <h3>Upcoming Sessions</h3>
+
+        {scheduled.map((session) => (
+          <div key={session.id} className="scheduled-item-modern">
+            <div>
+              <strong>{session.type}</strong>
+              <div className="session-meta-modern">
+                {formatDate(session.date)} • {session.time} • {session.location}
+              </div>
+            </div>
+
+            <button
+              className="btn-secondary-modern"
+              onClick={() => handleStartSession(session)}
+            >
+              Start
+            </button>
+          </div>
+        ))}
+
       </div>
     </div>
   );

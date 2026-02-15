@@ -1,7 +1,7 @@
 /* src/services/GeminiService.js */
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// 🚨 DEVELOPER SWITCH: Set to TRUE to save your API Quota
+// 🚨 DEVELOPER SWITCH: True = Mock Questions , False = API key used 
 const FORCE_MOCK_MODE = true; 
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
