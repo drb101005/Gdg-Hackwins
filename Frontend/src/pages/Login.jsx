@@ -4,11 +4,34 @@ import { Link, useNavigate } from "react-router-dom";
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState({});
   const navigate = useNavigate();
+
+  const validateForm = () => {
+    const newErrors = {};
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email) {
+      newErrors.email = "Email is required";
+    } else if (!emailRegex.test(email)) {
+      newErrors.email = "Please enter a valid email address";
+    }
+
+    if (!password) {
+      newErrors.password = "Password is required";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    navigate("/home");
+    if (validateForm()) {
+      // In a real app, you would verify credentials here
+      navigate("/home");
+    }
   };
 
   return (
@@ -17,7 +40,7 @@ function Login() {
       <div className="auth-card-modern">
 
         <Link to="/" className="auth-logo-modern">
-          InterviewLab
+          SkillBarter
         </Link>
 
         <h2>Welcome back</h2>
@@ -27,25 +50,29 @@ function Login() {
 
         <form onSubmit={handleSubmit} className="auth-form-modern">
 
-          <label>Email</label>
-          <input
-            type="email"
-            className="input-modern"
-            placeholder="Enter your email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+          <div className="form-group">
+            <label>Email</label>
+            <input
+              type="email"
+              className={`input-modern ${errors.email ? 'input-error' : ''}`}
+              placeholder="Enter your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            {errors.email && <span className="error-text" style={{ color: 'red', fontSize: '0.875rem' }}>{errors.email}</span>}
+          </div>
 
-          <label>Password</label>
-          <input
-            type="password"
-            className="input-modern"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+          <div className="form-group">
+            <label>Password</label>
+            <input
+              type="password"
+              className={`input-modern ${errors.password ? 'input-error' : ''}`}
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            {errors.password && <span className="error-text" style={{ color: 'red', fontSize: '0.875rem' }}>{errors.password}</span>}
+          </div>
 
           <button type="submit" className="btn-primary-modern w-full-modern">
             Sign In

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Landing from './pages/Landing.jsx';
 import Login from './pages/Login.jsx';
@@ -10,8 +10,23 @@ import ScheduledInterviews from './pages/ScheduledInterviews.jsx';
 import Analytics from './pages/Analytics.jsx';
 import Settings from './pages/Settings.jsx';
 import AppLayout from './components/AppLayout.jsx';
+import IntroAnimation from './components/IntroAnimation.jsx';
 
 function App() {
+  const [showIntro, setShowIntro] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowIntro(false);
+    }, 5000); // 5 seconds
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (showIntro) {
+    return <IntroAnimation />;
+  }
+
   return (
     <BrowserRouter>
       <div className="app">
