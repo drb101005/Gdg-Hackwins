@@ -122,30 +122,177 @@ body {
 
 /* ---------- HERO ---------- */
 
+/* ---------- HERO ---------- */
+
 .hero-modern {
-  padding: 6rem 3rem 4rem;
-  max-width: 1100px;
+  padding: 8rem 3rem 6rem;
+  max-width: 1200px;
   margin: auto;
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  /* Text left, Image right */
+  gap: 4rem;
+  align-items: center;
 }
 
 .hero-text h1 {
-  font-size: 3rem;
+  font-size: 3.5rem;
   font-weight: 800;
-  line-height: 1.2;
+  line-height: 1.1;
   margin-bottom: 1.5rem;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: fadeInUp 0.8s ease-out;
 }
 
 .hero-text p {
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   color: var(--text-secondary);
-  max-width: 600px;
-  margin-bottom: 2rem;
+  max-width: 500px;
+  margin-bottom: 2.5rem;
+  animation: fadeInUp 0.8s ease-out 0.2s backwards;
 }
 
 .hero-actions-modern {
   display: flex;
   gap: 1rem;
   flex-wrap: wrap;
+  animation: fadeInUp 0.8s ease-out 0.4s backwards;
+}
+
+.hero-image-container {
+  position: relative;
+  width: 100%;
+  height: 500px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  animation: float 6s ease-in-out infinite;
+}
+
+.hero-image-placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #2a2a72 0%, #009ffd 100%);
+  /* Fallback gradient */
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-size: 1.5rem;
+  font-weight: bold;
+  opacity: 0.8;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-20px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------- FEATURE CARDS (Interactive) ---------- */
+
+.preview-section {
+  padding: 6rem 3rem;
+  max-width: 1200px;
+  margin: auto;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-top: 3rem;
+}
+
+.feature-card {
+  background: var(--bg-surface);
+  padding: 2.5rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  border: 1px solid var(--border-light);
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card:hover {
+  transform: translateY(-10px) scale(1.02);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+  border-color: var(--accent);
+}
+
+.feature-icon {
+  width: 50px;
+  height: 50px;
+  background: rgba(79, 70, 229, 0.1);
+  color: var(--accent);
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  transition: 0.3s;
+}
+
+.feature-card:hover .feature-icon {
+  background: var(--accent);
+  color: white;
+  transform: rotate(5deg);
+}
+
+.feature-card h3 {
+  font-size: 1.4rem;
+  margin-bottom: 0.8rem;
+}
+
+.feature-card p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.more-info {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-light);
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  opacity: 0;
+  transform: translateY(10px);
+  transition: 0.3s ease;
+  height: 0;
+  overflow: hidden;
+}
+
+.feature-card:hover .more-info {
+  opacity: 1;
+  transform: translateY(0);
+  height: auto;
+  padding-top: 1rem;
 }
 
 /* ---------- BUTTONS ---------- */
@@ -333,6 +480,7 @@ button:hover {
     padding: 3rem 1.5rem;
   }
 }
+
 /* ---------- HOME MODERN ---------- */
 
 .home-modern {
@@ -456,6 +604,7 @@ button:hover {
     grid-template-columns: 1fr;
   }
 }
+
 /* ---------- INTERVIEW MODERN ---------- */
 
 .interview-modern {
@@ -566,6 +715,7 @@ button:hover {
   background: var(--accent);
   color: white;
 }
+
 /* ---------- DASHBOARD MODERN ---------- */
 
 .dashboard-modern {
@@ -659,6 +809,7 @@ button:hover {
   font-size: 1.1rem;
   color: var(--accent);
 }
+
 /* ---------- ANALYTICS MODERN ---------- */
 
 .analytics-modern {
@@ -752,11 +903,9 @@ button:hover {
   left: 0;
   width: 100%;
   height: 60%;
-  background: linear-gradient(
-    to top,
-    rgba(79, 70, 229, 0.3),
-    rgba(79, 70, 229, 0.05)
-  );
+  background: linear-gradient(to top,
+      rgba(79, 70, 229, 0.3),
+      rgba(79, 70, 229, 0.05));
   animation: growChart 1.2s ease forwards;
 }
 
@@ -764,6 +913,7 @@ button:hover {
   from {
     height: 0%;
   }
+
   to {
     height: 60%;
   }
@@ -782,6 +932,7 @@ button:hover {
   padding: 1.5rem;
   border-radius: var(--radius-lg);
 }
+
 .theme-toggle {
   background: var(--bg-surface);
   border: 1px solid var(--border-light);
@@ -794,6 +945,7 @@ button:hover {
 .theme-toggle:hover {
   background: var(--bg-muted);
 }
+
 /* ---------- AUTH MODERN ---------- */
 
 .auth-modern {
@@ -859,6 +1011,7 @@ button:hover {
 .w-full-modern {
   width: 100%;
 }
+
 .input-modern {
   padding: 0.75rem 1rem;
   border-radius: var(--radius-md);
@@ -872,6 +1025,7 @@ button:hover {
   outline: none;
   border-color: var(--accent);
 }
+
 /* =========================================
    SIDEBAR LAYOUT SYSTEM
    ========================================= */
@@ -965,6 +1119,7 @@ button:hover {
   background: var(--bg-main);
   overflow-y: auto;
 }
+
 /* =========================================
    SCHEDULED MODERN
    ========================================= */
@@ -1020,6 +1175,7 @@ button:hover {
     grid-template-columns: 1fr;
   }
 }
+
 /* =========================================
    SETTINGS MODERN
    ========================================= */
@@ -1068,3 +1224,114 @@ button:hover {
   accent-color: var(--accent);
 }
 
+
+.input-error {
+  border-color: #ef4444 !important;
+}
+
+.error-text {
+  color: #ef4444;
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+  display: block;
+}
+
+/* ---------- INTRO ANIMATION (SCATTERED) ---------- */
+
+.intro-container-black {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  background: black;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.intro-text-scattered {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  perspective: 1200px;
+}
+
+.scatter-letter {
+  display: inline-block;
+  font-size: 6rem;
+  /* Bigger font */
+  font-weight: 900;
+  color: white;
+  /* White text on black */
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+  position: relative;
+
+  /* Initial state: scattered */
+  opacity: 0;
+  transform: translate3d(var(--x), var(--y), 0) rotate(var(--r)) scale(var(--s));
+
+  animation: scatterIn 3.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes scatterIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(var(--x), var(--y), -1000px) rotate(var(--r)) scale(var(--s));
+  }
+
+  20% {
+    opacity: 1;
+  }
+
+  70% {
+    /* Assemble */
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 0 30px var(--accent);
+  }
+
+  85% {
+    /* Hold */
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+
+  100% {
+    /* Fade out slightly before removal */
+    transform: translate3d(0, 0, 50px) scale(1.1);
+    opacity: 0;
+  }
+}
+
+/* ---------- UI FIXES ---------- */
+
+/* Ensure consistent height and width for inputs and buttons in auth forms */
+.auth-form-modern input.input-modern,
+.auth-form-modern button.btn-primary-modern {
+  height: 48px;
+  /* Fixed height for consistency */
+  padding: 0 1rem;
+  /* Consistent padding */
+  font-size: 1rem;
+  line-height: normal;
+  display: flex;
+  align-items: center;
+  /* Vertically center content */
+  justify-content: center;
+  /* Center button text */
+  width: 100%;
+  /* Ensure full width */
+  box-sizing: border-box;
+  /* Include padding/border in width/height */
+}
+
+/* Specific adjustment for button if needed */
+.auth-form-modern button.btn-primary-modern {
+  margin-top: 1rem;
+}

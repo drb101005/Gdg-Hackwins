@@ -2,26 +2,26 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // 🚨 DEVELOPER SWITCH: True = Mock Questions , False = API key used 
-const FORCE_MOCK_MODE = true; 
+const FORCE_MOCK_MODE = false;
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 // --- 1. EXPANDED MOCK DATABASE ---
 const MOCK_DB = {
-"Android": [
-  "What is Android?",
-  "Explain the Android activity lifecycle.",
-  "What is an Activity?",
-  "What is the difference between Activity and Fragment?",
-  "What is an APK file?",
-  "What is an Intent and how is it used?",
-  "What is Android Studio?",
-  "What is the difference between implicit and explicit intents?",
-  "How do you store data locally in an Android app?",
-  "What is the Android Manifest file used for?"
-],
+  "Android": [
+    "What is Android?",
+    "Explain the Android activity lifecycle.",
+    "What is an Activity?",
+    "What is the difference between Activity and Fragment?",
+    "What is an APK file?",
+    "What is an Intent and how is it used?",
+    "What is Android Studio?",
+    "What is the difference between implicit and explicit intents?",
+    "How do you store data locally in an Android app?",
+    "What is the Android Manifest file used for?"
+  ],
 
-   "Machine Learning": [
+  "Machine Learning": [
     "What is the difference between Supervised and Unsupervised learning?",
     "Explain the concept of Overfitting and how to prevent it.",
     "What is a Confusion Matrix?",
@@ -68,7 +68,7 @@ const FEEDBACK_VARIATIONS = [
 const getMockQuestion = (topic, previousQuestions = []) => {
   const lowerTopic = topic.toLowerCase();
   let category = "General";
-  
+
   // Keyword matching logic
   if (lowerTopic.includes("andriod") || lowerTopic.includes("ui") || lowerTopic.includes("ux") || lowerTopic.includes("android")) {
     category = "Android";
@@ -88,7 +88,7 @@ const getMockQuestion = (topic, previousQuestions = []) => {
 // 🔥 FIXED: No Repeats Logic
 const getRandomUniqueFrom = (category, previousQuestions) => {
   const allQuestions = MOCK_DB[category];
-  
+
   // Filter out questions that have ALREADY been asked
   const availableQuestions = allQuestions.filter(q => !previousQuestions.includes(q));
 
@@ -127,7 +127,7 @@ async function tryGenerateWithFallback(prompt) {
 export const generateQuestion = async (topic, previousQuestions = []) => {
   try {
     const historyText = previousQuestions.length > 0 ? `Do NOT ask: ${JSON.stringify(previousQuestions)}.` : "";
-    
+
     // 🔥 IMPROVED PROMPT: Handles filenames gracefully
     const prompt = `
       Role: Senior Technical Interviewer.
@@ -144,12 +144,12 @@ export const generateQuestion = async (topic, previousQuestions = []) => {
       - No introductory fluff ("Okay," "Great," "Next question is...").
       - Tone: Professional and direct.
     `;
-    
+
     return await tryGenerateWithFallback(prompt);
   } catch (error) {
     console.log("Using Mock Question for Topic:", topic);
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     // 🔥 PASS HISTORY TO MOCK FUNCTION
     return getMockQuestion(topic || "General", previousQuestions);
   }
