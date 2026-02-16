@@ -32,21 +32,21 @@
 /* ---------- DARK THEME ---------- */
 
 .dark {
-  --bg-main: #0f172a;
-  --bg-surface: #1e293b;
-  --bg-muted: #111827;
+  --bg-main: #000000;
+  --bg-surface: #121212;
+  --bg-muted: #18181b;
 
   --text-primary: #f9fafb;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
 
   --accent: #6366f1;
   --accent-hover: #4f46e5;
 
-  --border-light: #334155;
+  --border-light: #27272a;
 
-  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.5);
-  --shadow-hover: 0 14px 40px rgba(0, 0, 0, 0.6);
+  --shadow-soft: 0 10px 30px rgba(0, 0, 0, 0.8);
+  --shadow-hover: 0 14px 40px rgba(0, 0, 0, 0.9);
 }
 
 /* ---------- RESET ---------- */

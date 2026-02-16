@@ -12,6 +12,8 @@ import Settings from './pages/Settings.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import IntroAnimation from './components/IntroAnimation.jsx';
 
+import BackButton from './components/BackButton.jsx';
+
 function App() {
   const [showIntro, setShowIntro] = useState(true);
 
@@ -29,6 +31,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <BackButton />
       <div className="app">
         <Routes>
           {/* Public routes without sidebar */}
