@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import FeedbackModal from "../components/FeedbackModal";
 import useVoiceRecognition from "../hooks/useVoiceRecognition";
-import { generateQuestion, evaluateAnswer } from "../services/GeminiService";
+import { generateQuestion, evaluateAnswerText } from "../services/api";
 
 function Interview() {
   const navigate = useNavigate();
@@ -78,7 +78,8 @@ function Interview() {
   const fetchNextQuestion = async () => {
     setIsProcessing(true);
     try {
-      const q = await generateQuestion(TOPIC, askedQuestions);
+      const result = await generateQuestion(TOPIC, askedQuestions);
+      const q = result?.question || "Tell me about yourself.";
       setCurrentQuestion(q);
       setAskedQuestions((prev) => [...prev, q]);
       setMessages((prev) => [...prev, { type: "ai", text: q }]);
@@ -109,7 +110,7 @@ function Interview() {
     setIsProcessing(true);
 
     try {
-      const result = await evaluateAnswer(currentQuestion, answerText);
+      const result = await evaluateAnswerText(currentQuestion, answerText);
       setCurrentFeedback(result);
       setShowFeedback(true);
     } catch (err) {

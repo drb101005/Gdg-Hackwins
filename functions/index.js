@@ -12,7 +12,7 @@ const multer = require("multer");
 const pdfParse = require("pdf-parse");
 const fs = require("fs");
 const speech = require("@google-cloud/speech");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const OpenAI = require("openai");
 
 // Limit instances for cost control
 setGlobalOptions({ maxInstances: 10 });
@@ -21,14 +21,22 @@ setGlobalOptions({ maxInstances: 10 });
 initializeApp();
 const db = getFirestore();
 
-// Gemini SDK
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// OpenAI SDK
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // Multer setup for file uploads
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Google Cloud Speech client
 const speechClient = new speech.SpeechClient();
+
+async function generateText(prompt) {
+  const response = await openai.responses.create({
+    model: "gpt-4o-mini",
+    input: prompt
+  });
+  return response.output_text;
+}
 
 /**
  * Firebase Auth middleware (Bearer ID token)
@@ -59,20 +67,38 @@ function requireAuth(handler) {
 }
 
 /**
- * 1️⃣ Test Gemini
+ * Simple CORS middleware for local dev (and production-safe)
  */
-exports.testGemini = onRequest(
-  { region: "asia-south1" },
-  requireAuth(async (req, res) => {
-    try {
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-      const result = await model.generateContent("Say hello from Gemini");
-      res.status(200).send(result.response.text());
-    } catch (err) {
-      logger.error("Gemini error:", err);
-      res.status(500).send("Gemini failed");
+function withCors(handler) {
+  return (req, res) => {
+    const origin = req.get("origin") || "*";
+    res.set("Access-Control-Allow-Origin", origin);
+    res.set("Vary", "Origin");
+    res.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+    if (req.method === "OPTIONS") {
+      return res.status(204).send("");
     }
-  })
+
+    return handler(req, res);
+  };
+}
+
+/**
+ * 1️⃣ Test OpenAI
+ */
+exports.testOpenAI = onRequest(
+  { region: "asia-south1" },
+  withCors(requireAuth(async (req, res) => {
+    try {
+      const text = await generateText("Say hello from OpenAI");
+      res.status(200).send(text);
+    } catch (err) {
+      logger.error("OpenAI error:", err);
+      res.status(500).send("OpenAI failed");
+    }
+  }))
 );
 
 /**
@@ -80,7 +106,7 @@ exports.testGemini = onRequest(
  */
 exports.uploadAndGenerate = onRequest(
   { region: "asia-south1" },
-  requireAuth((req, res) => {
+  withCors(requireAuth((req, res) => {
     upload.single("file")(req, res, async (err) => {
       if (err) return res.status(400).send("File upload failed");
 
@@ -91,7 +117,6 @@ exports.uploadAndGenerate = onRequest(
         const text = pdfData.text || "";
         if (!text.trim()) return res.status(400).send("PDF has no text");
 
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
         const prompt = `
 You are an interviewer.
 From the following content, generate 5 concise technical interview questions.
@@ -100,8 +125,8 @@ Return only a JSON array of strings.
 Content:
 ${text}
         `;
-        const result = await model.generateContent(prompt);
-        const questions = JSON.parse(result.response.text());
+        const resultText = await generateText(prompt);
+        const questions = JSON.parse(resultText);
 
         const docRef = await db.collection("interviews").add({
           questions,
@@ -114,15 +139,15 @@ ${text}
         res.status(500).send("Failed to generate questions");
       }
     });
-  })
+  }))
 );
 
 /**
- * 3️⃣ Submit Answer → Speech-to-Text → Gemini Evaluation
+ * 3️⃣ Submit Answer → Speech-to-Text → OpenAI Evaluation
  */
 exports.submitAnswer = onRequest(
   { region: "asia-south1" },
-  requireAuth((req, res) => {
+  withCors(requireAuth((req, res) => {
     upload.single("audio")(req, res, async (err) => {
       if (err) return res.status(400).send("Audio upload failed");
 
@@ -143,8 +168,7 @@ exports.submitAnswer = onRequest(
           .map(r => r.alternatives[0].transcript)
           .join(" ");
 
-        // Ask Gemini to evaluate answer
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        // Ask OpenAI to evaluate answer
         const prompt = `
 Question: ${question}
 Answer: ${transcript}
@@ -156,8 +180,8 @@ Evaluate:
 
 Respond strictly in JSON.
         `;
-        const evalResult = await model.generateContent(prompt);
-        const evaluation = JSON.parse(evalResult.response.text());
+        const evalText = await generateText(prompt);
+        const evaluation = JSON.parse(evalText);
 
         // Save answer in Firestore
         const interviewRef = db.collection("interviews").doc(interviewId);
@@ -175,15 +199,84 @@ Respond strictly in JSON.
         res.status(500).send("Failed to evaluate answer");
       }
     });
-  })
+  }))
 );
 
 /**
  * 4️⃣ Get Interview Summary
  */
+/**
+ * 4ï¸âƒ£ Generate a Single Question (Topic + History)
+ */
+exports.generateQuestion = onRequest(
+  { region: "asia-south1" },
+  withCors(async (req, res) => {
+    try {
+      const { topic, previousQuestions } = req.body || {};
+      const historyText = Array.isArray(previousQuestions) && previousQuestions.length
+        ? `Do NOT ask any of: ${JSON.stringify(previousQuestions)}.`
+        : "";
+
+      const prompt = `
+Role: Senior Technical Interviewer.
+Task: Ask one technical question based on Topic: "${topic || "General"}".
+
+Logic:
+1. If Topic is a job title (e.g., "React Dev"), ask a relevant technical question.
+2. If Topic is a filename or "unknown", ask a "General Software Engineering" question.
+3. Difficulty: Start "Easy". Analyze history: ${historyText}
+
+Constraints:
+- Response MUST be ONLY the question.
+- Maximum 20 words.
+- No introductory fluff ("Okay," "Great," "Next question is...").
+- Tone: Professional and direct.
+      `;
+
+      const questionRaw = await generateText(prompt);
+      const question = String(questionRaw || "").replace(/^["'\s]+|["'\s]+$/g, "");
+      res.status(200).send({ question });
+    } catch (error) {
+      logger.error(error);
+      res.status(500).send("Failed to generate question");
+    }
+  })
+);
+
+/**
+ * 5ï¸âƒ£ Evaluate Text Answer
+ */
+exports.evaluateAnswerText = onRequest(
+  { region: "asia-south1" },
+  withCors(async (req, res) => {
+    try {
+      const { question, answer } = req.body || {};
+      if (!question || !answer) return res.status(400).send("Missing question or answer");
+
+      const prompt = `
+Question: "${question}"
+Answer: "${answer}"
+Grade 1-10. Split feedback into "positive" and "improve".
+Return STRICT JSON: { "score": number, "positive": "text", "improve": "text" }
+      `;
+
+      const evalText = await generateText(prompt);
+      const cleanText = evalText.replace(/```json|```/g, "").trim();
+      const evaluation = JSON.parse(cleanText);
+      res.status(200).send(evaluation);
+    } catch (error) {
+      logger.error(error);
+      res.status(500).send("Failed to evaluate answer");
+    }
+  })
+);
+
+/**
+ * 6ï¸âƒ£ Get Interview Summary
+ */
 exports.getInterviewSummary = onRequest(
   { region: "asia-south1" },
-  requireAuth(async (req, res) => {
+  withCors(requireAuth(async (req, res) => {
     try {
       const { interviewId, faceStats } = req.body;
       if (!interviewId)
@@ -194,7 +287,6 @@ exports.getInterviewSummary = onRequest(
 
       const data = doc.data();
 
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
       const prompt = `
 Given the interview data and attention stats:
 ${JSON.stringify({ answers: data.answers, faceStats })}
@@ -203,15 +295,15 @@ Summarize overall confidence, strengths, weaknesses, and give an overall score.
 Return JSON.
       `;
 
-      const summaryResult = await model.generateContent(prompt);
-      const summary = JSON.parse(summaryResult.response.text());
+      const summaryText = await generateText(prompt);
+      const summary = JSON.parse(summaryText);
 
       res.status(200).send(summary);
     } catch (error) {
       logger.error(error);
       res.status(500).send("Failed to get interview summary");
     }
-  })
+  }))
 );
 
 /**
@@ -220,3 +312,4 @@ Return JSON.
 function firestoreFieldAppend(obj) {
   return obj; // Simple append logic, can improve with FieldValue.arrayUnion if needed
 }
+

@@ -42,6 +42,26 @@ export async function submitAnswer(payload) {
   return res.json();
 }
 
+export async function generateQuestion(topic, previousQuestions = []) {
+  const authHeader = await getAuthHeader();
+  const res = await fetch(`${API_BASE}/generateQuestion`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeader },
+    body: JSON.stringify({ topic, previousQuestions }),
+  });
+  return res.json();
+}
+
+export async function evaluateAnswerText(question, answer) {
+  const authHeader = await getAuthHeader();
+  const res = await fetch(`${API_BASE}/evaluateAnswerText`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeader },
+    body: JSON.stringify({ question, answer }),
+  });
+  return res.json();
+}
+
 export async function getInterviewSummary(interviewId) {
   const authHeader = await getAuthHeader();
   const res = await fetch(`${API_BASE}/getInterviewSummary`, {
