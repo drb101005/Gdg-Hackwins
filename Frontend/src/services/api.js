@@ -9,6 +9,15 @@ async function getAuthHeader() {
   return { Authorization: `Bearer ${token}` };
 }
 
+async function safeJson(res) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: text || "Request failed", status: res.status };
+  }
+}
+
 export async function uploadAndGenerate(file) {
   const formData = new FormData();
   formData.append("file", file);
@@ -19,7 +28,7 @@ export async function uploadAndGenerate(file) {
     headers: { ...authHeader },
     body: formData,
   });
-  return res.json();
+  return safeJson(res);
 }
 
 export async function startInterview(interviewId) {
@@ -29,7 +38,7 @@ export async function startInterview(interviewId) {
     headers: { "Content-Type": "application/json", ...authHeader },
     body: JSON.stringify({ interviewId }),
   });
-  return res.json();
+  return safeJson(res);
 }
 
 export async function submitAnswer(payload) {
@@ -39,7 +48,7 @@ export async function submitAnswer(payload) {
     headers: { ...authHeader },
     body: payload,
   });
-  return res.json();
+  return safeJson(res);
 }
 
 export async function generateQuestion(topic, previousQuestions = []) {
@@ -49,7 +58,7 @@ export async function generateQuestion(topic, previousQuestions = []) {
     headers: { "Content-Type": "application/json", ...authHeader },
     body: JSON.stringify({ topic, previousQuestions }),
   });
-  return res.json();
+  return safeJson(res);
 }
 
 export async function evaluateAnswerText(question, answer) {
@@ -59,7 +68,7 @@ export async function evaluateAnswerText(question, answer) {
     headers: { "Content-Type": "application/json", ...authHeader },
     body: JSON.stringify({ question, answer }),
   });
-  return res.json();
+  return safeJson(res);
 }
 
 export async function getInterviewSummary(interviewId) {
@@ -69,5 +78,5 @@ export async function getInterviewSummary(interviewId) {
     headers: { "Content-Type": "application/json", ...authHeader },
     body: JSON.stringify({ interviewId }),
   });
-  return res.json();
+  return safeJson(res);
 }

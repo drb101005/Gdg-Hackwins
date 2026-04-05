@@ -79,6 +79,10 @@ function Interview() {
     setIsProcessing(true);
     try {
       const result = await generateQuestion(TOPIC, askedQuestions);
+      if (result?.error) {
+        setMessages((prev) => [...prev, { type: "ai", text: "Sorry, I couldn't generate a question right now." }]);
+        return;
+      }
       const q = result?.question || "Tell me about yourself.";
       setCurrentQuestion(q);
       setAskedQuestions((prev) => [...prev, q]);
@@ -111,7 +115,11 @@ function Interview() {
 
     try {
       const result = await evaluateAnswerText(currentQuestion, answerText);
-      setCurrentFeedback(result);
+      if (result?.error) {
+        setCurrentFeedback({ score: 0, positive: "No feedback available.", improve: "Please try again." });
+      } else {
+        setCurrentFeedback(result);
+      }
       setShowFeedback(true);
     } catch (err) {
       console.error(err);
