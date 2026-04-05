@@ -9,11 +9,15 @@ import Interview from './pages/Interview.jsx';
 import ScheduledInterviews from './pages/ScheduledInterviews.jsx';
 import Analytics from './pages/Analytics.jsx';
 import Settings from './pages/Settings.jsx';
+import Summary from './pages/Summary.jsx';
+import Admin from './pages/Admin.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import IntroAnimation from './components/IntroAnimation.jsx';
 
 import BackButton from './components/BackButton.jsx';
 import { useAuth } from './hooks/useAuth.js';
+
+const INTRO_STORAGE_KEY = "ace_intro_seen";
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -30,15 +34,26 @@ function ProtectedRoute({ children }) {
 }
 
 function App() {
-  const [showIntro, setShowIntro] = useState(true);
+  const [showIntro, setShowIntro] = useState(() => {
+    if (typeof window === "undefined") {
+      return true;
+    }
+
+    return !window.sessionStorage.getItem(INTRO_STORAGE_KEY);
+  });
 
   useEffect(() => {
+    if (!showIntro) {
+      return undefined;
+    }
+
     const timer = setTimeout(() => {
       setShowIntro(false);
-    }, 5000); // 5 seconds
+      window.sessionStorage.setItem(INTRO_STORAGE_KEY, "true");
+    }, 1800);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [showIntro]);
 
   if (showIntro) {
     return <IntroAnimation />;
@@ -53,7 +68,6 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
-          <Route path="/interview" element={<Interview />} />
 
           {/* Protected routes with sidebar */}
           <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
@@ -62,6 +76,9 @@ function App() {
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/interview" element={<Interview />} />
+            <Route path="/summary/:interviewId" element={<Summary />} />
+            <Route path="/admin" element={<Admin />} />
           </Route>
         </Routes>
       </div>

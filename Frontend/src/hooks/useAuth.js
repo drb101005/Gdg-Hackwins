@@ -1,17 +1,42 @@
 import { useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../services/firebase";
+import { getCurrentUser } from "../services/api";
+import { getStoredAuth, subscribeToAuthChanges } from "../services/auth";
 
 export function useAuth() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => getStoredAuth().user);
+  const [loading, setLoading] = useState(Boolean(getStoredAuth().token));
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser || null);
+    const sync = () => {
+      const session = getStoredAuth();
+      setUser(session.user);
       setLoading(false);
-    });
-    return () => unsubscribe();
+    };
+
+    sync();
+    const unsubscribe = subscribeToAuthChanges(sync);
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const session = getStoredAuth();
+    if (!session.token) {
+      setLoading(false);
+      return;
+    }
+
+    getCurrentUser()
+      .then((response) => {
+        setUser(response.user);
+      })
+      .catch((error) => {
+        if (error?.status === 401) {
+          setUser(null);
+        }
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   return { user, loading };

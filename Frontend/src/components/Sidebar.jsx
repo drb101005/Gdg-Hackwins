@@ -1,10 +1,10 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { signOut } from "firebase/auth";
-import { auth } from "../services/firebase";
+import { clearStoredAuth, getStoredAuth } from "../services/auth";
 
 function Sidebar() {
   const location = useLocation();
+  const user = getStoredAuth().user;
 
   const navItems = [
     {
@@ -49,15 +49,26 @@ function Sidebar() {
         </svg>
       ),
       label: 'Settings'
-    }
+    },
+    ...(user?.role === "admin"
+      ? [{
+          path: '/admin',
+          icon: (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <path d="M9 9h6"/>
+              <path d="M9 15h6"/>
+              <path d="M12 4v16"/>
+            </svg>
+          ),
+          label: 'Admin Panel'
+        }]
+      : [])
   ];
 
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-    } finally {
-      window.location.href = '/';
-    }
+  const handleLogout = () => {
+    clearStoredAuth();
+    window.location.href = '/';
   };
 
   return (
