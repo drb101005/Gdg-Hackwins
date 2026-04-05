@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Landing from './pages/Landing.jsx';
 import Login from './pages/Login.jsx';
 import Signup from './pages/Signup.jsx';
@@ -13,6 +13,21 @@ import AppLayout from './components/AppLayout.jsx';
 import IntroAnimation from './components/IntroAnimation.jsx';
 
 import BackButton from './components/BackButton.jsx';
+import { useAuth } from './hooks/useAuth.js';
+
+function ProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="auth-loading">Loading...</div>;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return children;
+}
 
 function App() {
   const [showIntro, setShowIntro] = useState(true);
@@ -41,7 +56,7 @@ function App() {
           <Route path="/interview" element={<Interview />} />
 
           {/* Protected routes with sidebar */}
-          <Route element={<AppLayout />}>
+          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/home" element={<Home />} />
             <Route path="/scheduled" element={<ScheduledInterviews />} />
             <Route path="/analytics" element={<Analytics />} />

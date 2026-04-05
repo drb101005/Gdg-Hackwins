@@ -1,12 +1,15 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { auth } from "../services/firebase";
 
 function Signup() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState({});
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const validateForm = () => {
@@ -41,12 +44,22 @@ function Signup() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (validateForm()) {
-      // Simulate signup success
-      setShowSuccess(true);
-      // In a real app, you would verify uniqueness here against the backend
+    setAuthError("");
+    if (!validateForm()) return;
+
+    try {
+      setIsSubmitting(true);
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      if (cred?.user) {
+        await updateProfile(cred.user, { displayName: name });
+      }
+      navigate("/home");
+    } catch (err) {
+      setAuthError(err?.message || "Signup failed");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -64,17 +77,7 @@ function Signup() {
           Start building your interview confidence.
         </p>
 
-        {showSuccess ? (
-          <div className="text-secondary-modern text-center">
-            <h3>Signup Successful!</h3>
-            <p className="mt-4">
-              <Link to="/login" className="btn-primary-modern w-full-modern block text-center no-underline">
-                Login here
-              </Link>
-            </p>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="auth-form-modern">
+        <form onSubmit={handleSubmit} className="auth-form-modern">
 
             <div className="form-group">
               <label>Full Name</label>
@@ -112,12 +115,13 @@ function Signup() {
               {errors.password && <span className="error-text" style={{color: 'red', fontSize: '0.875rem'}}>{errors.password}</span>}
             </div>
 
-            <button type="submit" className="btn-primary-modern w-full-modern">
-              Create Account
+            {authError && <span className="error-text" style={{color: 'red', fontSize: '0.875rem'}}>{authError}</span>}
+
+            <button type="submit" className="btn-primary-modern w-full-modern" disabled={isSubmitting}>
+              {isSubmitting ? "Creating..." : "Create Account"}
             </button>
 
           </form>
-        )}
 
         <p className="auth-footer-modern">
           Already have an account?{" "}

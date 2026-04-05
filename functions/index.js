@@ -7,6 +7,7 @@ const logger = require("firebase-functions/logger");
 const { setGlobalOptions } = require("firebase-functions");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore } = require("firebase-admin/firestore");
+const { getAuth } = require("firebase-admin/auth");
 const multer = require("multer");
 const pdfParse = require("pdf-parse");
 const fs = require("fs");
@@ -30,11 +31,39 @@ const upload = multer({ storage: multer.memoryStorage() });
 const speechClient = new speech.SpeechClient();
 
 /**
+ * Firebase Auth middleware (Bearer ID token)
+ */
+function requireAuth(handler) {
+  return (req, res) => {
+    try {
+      const header = req.get("authorization") || "";
+      const match = header.match(/^Bearer (.+)$/i);
+      if (!match) return res.status(401).send("Missing or invalid Authorization header");
+
+      const token = match[1];
+      return getAuth()
+        .verifyIdToken(token)
+        .then((decoded) => {
+          req.user = decoded;
+          return handler(req, res);
+        })
+        .catch((err) => {
+          logger.warn("Firebase auth failed", err);
+          return res.status(401).send("Invalid or expired token");
+        });
+    } catch (err) {
+      logger.warn("Firebase auth error", err);
+      return res.status(401).send("Invalid or expired token");
+    }
+  };
+}
+
+/**
  * 1️⃣ Test Gemini
  */
 exports.testGemini = onRequest(
   { region: "asia-south1" },
-  async (req, res) => {
+  requireAuth(async (req, res) => {
     try {
       const model = genAI.getGenerativeModel({ model: "gemini-pro" });
       const result = await model.generateContent("Say hello from Gemini");
@@ -43,7 +72,7 @@ exports.testGemini = onRequest(
       logger.error("Gemini error:", err);
       res.status(500).send("Gemini failed");
     }
-  }
+  })
 );
 
 /**
@@ -51,7 +80,7 @@ exports.testGemini = onRequest(
  */
 exports.uploadAndGenerate = onRequest(
   { region: "asia-south1" },
-  (req, res) => {
+  requireAuth((req, res) => {
     upload.single("file")(req, res, async (err) => {
       if (err) return res.status(400).send("File upload failed");
 
@@ -85,7 +114,7 @@ ${text}
         res.status(500).send("Failed to generate questions");
       }
     });
-  }
+  })
 );
 
 /**
@@ -93,7 +122,7 @@ ${text}
  */
 exports.submitAnswer = onRequest(
   { region: "asia-south1" },
-  (req, res) => {
+  requireAuth((req, res) => {
     upload.single("audio")(req, res, async (err) => {
       if (err) return res.status(400).send("Audio upload failed");
 
@@ -146,7 +175,7 @@ Respond strictly in JSON.
         res.status(500).send("Failed to evaluate answer");
       }
     });
-  }
+  })
 );
 
 /**
@@ -154,7 +183,7 @@ Respond strictly in JSON.
  */
 exports.getInterviewSummary = onRequest(
   { region: "asia-south1" },
-  async (req, res) => {
+  requireAuth(async (req, res) => {
     try {
       const { interviewId, faceStats } = req.body;
       if (!interviewId)
@@ -182,7 +211,7 @@ Return JSON.
       logger.error(error);
       res.status(500).send("Failed to get interview summary");
     }
-  }
+  })
 );
 
 /**

@@ -1,10 +1,14 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../services/firebase";
 
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState({});
+  const [authError, setAuthError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   const validateForm = () => {
@@ -26,11 +30,19 @@ function Login() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (validateForm()) {
-      // In a real app, you would verify credentials here
+    setAuthError("");
+    if (!validateForm()) return;
+
+    try {
+      setIsSubmitting(true);
+      await signInWithEmailAndPassword(auth, email, password);
       navigate("/home");
+    } catch (err) {
+      setAuthError(err?.message || "Login failed");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -74,8 +86,14 @@ function Login() {
             {errors.password && <span className="error-text" style={{ color: 'red', fontSize: '0.875rem' }}>{errors.password}</span>}
           </div>
 
-          <button type="submit" className="btn-primary-modern w-full-modern">
-            Sign In
+          {authError && (
+            <div className="error-text" style={{ color: "red", fontSize: "0.875rem" }}>
+              {authError}
+            </div>
+          )}
+
+          <button type="submit" className="btn-primary-modern w-full-modern" disabled={isSubmitting}>
+            {isSubmitting ? "Signing in..." : "Sign In"}
           </button>
 
         </form>

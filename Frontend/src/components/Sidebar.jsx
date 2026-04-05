@@ -1,5 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { signOut } from "firebase/auth";
+import { auth } from "../services/firebase";
 
 function Sidebar() {
   const location = useLocation();
@@ -50,8 +52,12 @@ function Sidebar() {
     }
   ];
 
-  const handleLogout = () => {
-    window.location.href = '/';
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } finally {
+      window.location.href = '/';
+    }
   };
 
   return (
