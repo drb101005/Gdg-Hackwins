@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
+import SummaryMetricsChart from "../components/SummaryMetricsChart";
 import WavAudioPlayer from "../components/WavAudioPlayer";
 import VideoPlayer from "../components/VideoPlayer";
 import { getInterview } from "../services/api";
@@ -31,6 +32,21 @@ function Summary() {
   const answersByQuestionId = useMemo(
     () => new Map((interview?.answers || []).map((answer) => [answer.question_id, answer])),
     [interview?.answers],
+  );
+  const metricPoints = useMemo(
+    () =>
+      (interview?.questions || []).map((question, index) => {
+        const answer = answersByQuestionId.get(question.id);
+        return {
+          label: `Q${index + 1}`,
+          score: Number(answer?.score || 0),
+          wpm: Number(answer?.wpm || 0),
+          pause_count: Number(answer?.pause_count || 0),
+          filler_count: Number(answer?.filler_count || 0),
+          silence_percent: Number(answer?.silence_percent || 0),
+        };
+      }),
+    [answersByQuestionId, interview?.questions],
   );
 
   if (!interview) {
@@ -72,6 +88,8 @@ function Summary() {
         </div>
       </div>
 
+      <SummaryMetricsChart points={metricPoints} />
+
       <div className="sessions-modern">
         {interview.questions.map((question, index) => {
           const answer = answersByQuestionId.get(question.id);
@@ -91,6 +109,7 @@ function Summary() {
                 <span className="metric-pill-modern">WPM: {answer?.wpm ?? "-"}</span>
                 <span className="metric-pill-modern">Pauses: {answer?.pause_count ?? "-"}</span>
                 <span className="metric-pill-modern">Fillers: {answer?.filler_count ?? "-"}</span>
+                <span className="metric-pill-modern">Silence: {answer?.silence_percent ?? "-"}%</span>
                 <span className="metric-pill-modern">Duration: {answer?.duration ?? "-"}s</span>
               </div>
 

@@ -1,0 +1,2 @@
+add verifiers to api key 
+adding floating factor to log out

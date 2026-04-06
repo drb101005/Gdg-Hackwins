@@ -170,8 +170,9 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
         if (existingAnswer?.id) {
             await this.databaseService.execute(`
           UPDATE answers
-          SET audio_path = ?, video_path = ?, duration = ?, transcript = NULL, wpm = NULL, pause_count = NULL,
-              filler_count = NULL, score = NULL, feedback = NULL, improved_answer = NULL
+          SET audio_path = ?, video_path = ?, duration = ?, transcript = NULL, word_timestamps_json = NULL,
+              wpm = NULL, pause_count = NULL, filler_count = NULL, silence_percent = NULL,
+              score = NULL, feedback = NULL, improved_answer = NULL
           WHERE question_id = ?
         `, [audioPath, videoPath, numericDuration, questionId]);
         }
@@ -204,14 +205,16 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             const analysis = await this.processAnswer(question.question_text, answer.audio_path, Number(answer.duration || 30));
             await this.databaseService.execute(`
           UPDATE answers
-          SET transcript = ?, wpm = ?, pause_count = ?, filler_count = ?, duration = ?,
-              score = ?, feedback = ?, improved_answer = ?
+          SET transcript = ?, word_timestamps_json = ?, wpm = ?, pause_count = ?, filler_count = ?,
+              silence_percent = ?, duration = ?, score = ?, feedback = ?, improved_answer = ?
           WHERE question_id = ?
         `, [
                 analysis.transcript,
+                JSON.stringify(analysis.word_timestamps || []),
                 analysis.wpm,
                 analysis.pause_count,
                 analysis.filler_count,
+                analysis.silence_percent,
                 analysis.duration,
                 analysis.score,
                 analysis.feedback,
@@ -272,7 +275,7 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
         return {
             ...this.serializeInterview(interview),
             questions,
-            answers,
+            answers: answers.map((answer) => this.serializeAnswer(answer)),
         };
     }
     serializeInterview(interview) {
@@ -288,6 +291,25 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             current_question_index: Number(interview.current_question_index || 0),
             completed: Boolean(interview.completed),
             created_at: interview.created_at,
+        };
+    }
+    serializeAnswer(answer) {
+        let wordTimestamps = [];
+        if (answer.word_timestamps_json) {
+            try {
+                const parsed = JSON.parse(answer.word_timestamps_json);
+                if (Array.isArray(parsed)) {
+                    wordTimestamps = parsed;
+                }
+            }
+            catch (_error) {
+                wordTimestamps = [];
+            }
+        }
+        return {
+            ...answer,
+            silence_percent: answer.silence_percent ?? null,
+            word_timestamps: wordTimestamps,
         };
     }
     async getQuestions(interviewId) {
@@ -408,28 +430,31 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
                 return this.buildServiceUnavailableAnalysis(duration || 30);
             }
             this.logger.log(`Calling FastAPI for ${relativeAudioPath}`);
-            const transcriptFormData = new FormData();
-            transcriptFormData.append("file", new File([audioBytes], (0, node_path_1.basename)(relativeAudioPath), { type: "audio/wav" }));
-            const metricsFormData = new FormData();
-            metricsFormData.append("file", new File([audioBytes], (0, node_path_1.basename)(relativeAudioPath), { type: "audio/wav" }));
-            metricsFormData.append("duration", String(duration || 30));
-            const [transcribeResponse, metricsResponse] = await Promise.all([
-                fetch(`${this.aiBaseUrl}/transcribe`, {
-                    method: "POST",
-                    body: transcriptFormData,
-                }),
-                fetch(`${this.aiBaseUrl}/metrics`, {
-                    method: "POST",
-                    body: metricsFormData,
-                }),
-            ]);
-            if (!transcribeResponse.ok || !metricsResponse.ok) {
+            const analysisFormData = new FormData();
+            analysisFormData.append("file", new File([audioBytes], (0, node_path_1.basename)(relativeAudioPath), { type: "audio/wav" }));
+            analysisFormData.append("question_text", questionText);
+            analysisFormData.append("duration", String(duration || 30));
+            const analysisResponse = await fetch(`${this.aiBaseUrl}/analyze`, {
+                method: "POST",
+                body: analysisFormData,
+            });
+            if (!analysisResponse.ok) {
                 this.logger.warn(`FastAPI processing failed for ${relativeAudioPath}. Returning safe fallback analysis.`);
                 return this.buildServiceUnavailableAnalysis(duration || 30);
             }
-            const transcriptData = (await transcribeResponse.json());
-            const metricsData = (await metricsResponse.json());
-            return this.scoreAnalysis(questionText, transcriptData.transcript || fallback.transcript, metricsData.wpm ?? fallback.wpm, metricsData.pause_count ?? fallback.pause_count, metricsData.filler_count ?? fallback.filler_count, metricsData.duration ?? fallback.duration);
+            const analysisData = (await analysisResponse.json());
+            return {
+                transcript: analysisData.transcript || fallback.transcript,
+                word_timestamps: Array.isArray(analysisData.word_timestamps) ? analysisData.word_timestamps : fallback.word_timestamps,
+                wpm: analysisData.wpm ?? fallback.wpm,
+                pause_count: analysisData.pause_count ?? fallback.pause_count,
+                filler_count: analysisData.filler_count ?? fallback.filler_count,
+                silence_percent: analysisData.silence_percent ?? fallback.silence_percent,
+                duration: analysisData.duration ?? fallback.duration,
+                score: analysisData.score ?? fallback.score,
+                feedback: analysisData.feedback || fallback.feedback,
+                improved_answer: analysisData.improved_answer || fallback.improved_answer,
+            };
         }
         catch (_error) {
             this.logger.warn(`Unexpected processing failure for ${relativeAudioPath}. Returning mock fallback.`);
@@ -438,14 +463,16 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
     }
     buildMockAnalysis(questionText, fileName, duration) {
         const transcript = `Mock transcript for ${fileName}. The candidate gave a focused answer about ${questionText.toLowerCase()}.`;
-        return this.scoreAnalysis(questionText, transcript, 118, 2, 1, duration || 30);
+        return this.scoreAnalysis(questionText, transcript, [], 118, 2, 1, 22, duration || 30);
     }
     buildSilentAnalysis(duration) {
         return {
             transcript: "No answer detected from the recording.",
+            word_timestamps: [],
             wpm: 0,
             pause_count: 0,
             filler_count: 0,
+            silence_percent: 100,
             duration,
             score: 3.8,
             feedback: "No answer detected. Please retry and speak clearly for the full response window.",
@@ -455,24 +482,28 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
     buildServiceUnavailableAnalysis(duration) {
         return {
             transcript: "Processing service unavailable, try again.",
+            word_timestamps: [],
             wpm: 0,
             pause_count: 0,
             filler_count: 0,
+            silence_percent: 100,
             duration,
             score: 0,
             feedback: "Processing service unavailable, try again once the local FastAPI service is running.",
             improved_answer: "Retry after the processing service is restored so the platform can generate a transcript and coached answer.",
         };
     }
-    scoreAnalysis(questionText, transcript, wpm, pauseCount, fillerCount, duration) {
+    scoreAnalysis(questionText, transcript, wordTimestamps, wpm, pauseCount, fillerCount, silencePercent, duration) {
         const transcriptLengthScore = Math.min(2, transcript.split(/\s+/).filter(Boolean).length / 45);
         const fluencyPenalty = pauseCount * 0.2 + fillerCount * 0.25 + Math.max(0, Math.abs(125 - wpm) / 70);
         const score = Math.max(5.5, Math.min(9.6, Number((8 + transcriptLengthScore - fluencyPenalty).toFixed(1))));
         return {
             transcript,
+            word_timestamps: wordTimestamps,
             wpm,
             pause_count: pauseCount,
             filler_count: fillerCount,
+            silence_percent: silencePercent,
             duration,
             score,
             feedback: `Strong effort on "${questionText}". Tighten the structure a bit and keep examples specific to raise the score further.`,

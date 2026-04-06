@@ -41,6 +41,9 @@ function collectEnvironmentWarnings(env) {
     if (!env.AI_SERVICE_URL) {
         warnings.push("AI_SERVICE_URL is not set. Using the local FastAPI default at http://127.0.0.1:8000.");
     }
+    if (!env.OPENAI_API_KEY) {
+        warnings.push("OPENAI_API_KEY is not set. Transcript scoring and word-level analysis will stay unavailable until it is added.");
+    }
     if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD) {
         warnings.push("ADMIN_EMAIL or ADMIN_PASSWORD is not set. Using the default local admin credentials.");
     }

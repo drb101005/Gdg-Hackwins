@@ -180,9 +180,11 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
           audio_path VARCHAR(512) NOT NULL,
           video_path VARCHAR(512) NULL,
           transcript LONGTEXT NULL,
+          word_timestamps_json LONGTEXT NULL,
           wpm DOUBLE NULL,
           pause_count INT NULL,
           filler_count INT NULL,
+          silence_percent DOUBLE NULL,
           duration DOUBLE NULL,
           score DOUBLE NULL,
           feedback LONGTEXT NULL,
@@ -196,6 +198,8 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
         for (const statement of statements) {
             await this.execute(statement);
         }
+        await this.ensureColumnExists("answers", "word_timestamps_json", "LONGTEXT NULL");
+        await this.ensureColumnExists("answers", "silence_percent", "DOUBLE NULL");
     }
     async seedAdminUser() {
         const email = (process.env.ADMIN_EMAIL || "admin@local.test").trim().toLowerCase();
@@ -215,6 +219,18 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
             throw new Error("MySQL pool has not been initialized yet.");
         }
         return this.pool;
+    }
+    async ensureColumnExists(tableName, columnName, definition) {
+        const existing = await this.queryOne(`
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?
+        LIMIT 1
+      `, [this.config.database, tableName, columnName]);
+        if (existing?.COLUMN_NAME) {
+            return;
+        }
+        await this.execute(`ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${this.escapeIdentifier(columnName)} ${definition}`);
     }
     createExecutor(connection) {
         return {
