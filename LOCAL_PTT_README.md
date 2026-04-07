@@ -30,7 +30,7 @@ python client.py --hotkey f8 --mode hold
 - Default Whisper model: `base`
 - CPU default: `compute_type="int8"`
 - GPU default: `compute_type="float16"` when CUDA is available
-- Optional OpenAI-compatible endpoint: `POST /v1/audio/transcriptions`
+- Optional compatibility endpoint: `POST /v1/audio/transcriptions`
 
 ## Useful environment variables
 

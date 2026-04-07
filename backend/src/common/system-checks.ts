@@ -51,8 +51,8 @@ export function collectEnvironmentWarnings(env: NodeJS.ProcessEnv) {
     warnings.push("LOCAL_STT_PYTHON is not set. The backend will try the project .venv Python before falling back to system Python.");
   }
 
-  if (!env.OPENAI_API_KEY) {
-    warnings.push("OPENAI_API_KEY is not set. FastAPI question generation and OpenAI-backed analysis endpoints will stay unavailable until it is added.");
+  if (!env.GROQ_API_KEY) {
+    warnings.push("GROQ_API_KEY is not set. FastAPI Groq-backed question generation and answer evaluation will stay unavailable until it is added.");
   }
 
   if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD) {

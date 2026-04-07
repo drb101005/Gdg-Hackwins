@@ -1,16 +1,16 @@
+import asyncio
+import json
 import os
 import re
-from io import BytesIO
 from pathlib import Path
 import tempfile
 from threading import Lock
-from typing import Any
 
 from dotenv import load_dotenv
 from faster_whisper import WhisperModel
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, RateLimitError
+from groq import Groq
 from pydantic import BaseModel, Field
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -164,23 +164,19 @@ class LocalWhisperService:
 LOCAL_WHISPER: LocalWhisperService | None = None
 
 
-def get_openai_client(api_key_override: str | None = None) -> OpenAI:
-    api_key = (api_key_override or os.getenv("OPENAI_API_KEY", "")).strip()
+def get_groq_client(api_key_override: str | None = None) -> Groq:
+    api_key = (api_key_override or os.getenv("GROQ_API_KEY", "")).strip()
     if not api_key:
-        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured.")
-    return OpenAI(api_key=api_key)
-
-
-def get_transcription_model() -> str:
-    return os.getenv("OPENAI_TRANSCRIPTION_MODEL", "whisper-1").strip() or "whisper-1"
+        raise HTTPException(status_code=503, detail="GROQ_API_KEY is not configured.")
+    return Groq(api_key=api_key)
 
 
 def get_scoring_model() -> str:
-    return os.getenv("OPENAI_SCORING_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    return os.getenv("GROQ_SCORING_MODEL", "llama-3.3-70b-versatile").strip() or "llama-3.3-70b-versatile"
 
 
 def get_question_generation_model() -> str:
-    return os.getenv("OPENAI_QUESTION_MODEL", "gpt-4o-mini").strip() or "gpt-4o-mini"
+    return os.getenv("GROQ_QUESTION_MODEL", "llama-3.3-70b-versatile").strip() or "llama-3.3-70b-versatile"
 
 
 def get_local_whisper() -> LocalWhisperService:
@@ -241,115 +237,114 @@ def compute_metrics(words: list[WordTimestamp], transcript: str, duration: float
     }
 
 
-def extract_word_timestamps(transcription: Any) -> tuple[str, list[WordTimestamp]]:
-    payload = transcription.model_dump() if hasattr(transcription, "model_dump") else dict(transcription)
-    text = str(payload.get("text") or "").strip()
-    words: list[WordTimestamp] = []
+def parse_json_response(content: str, schema: type[BaseModel]) -> BaseModel:
+    text = (content or "").strip()
+    if not text:
+        raise HTTPException(status_code=502, detail="The model returned an empty response.")
 
-    for item in payload.get("words") or []:
-        word = str(item.get("word") or "").strip()
-        if not word:
-            continue
+    fenced_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
+    if fenced_match:
+        text = fenced_match.group(1).strip()
+
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            raise HTTPException(status_code=502, detail="Could not parse the model JSON response.")
         try:
-            start = float(item.get("start", 0.0))
-            end = float(item.get("end", start))
-        except (TypeError, ValueError):
-            continue
-        words.append(WordTimestamp(word=word, start=max(0.0, start), end=max(start, end)))
+            payload = json.loads(text[start : end + 1])
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=502, detail="Could not parse the model JSON response.") from exc
 
-    return text, words
+    try:
+        return schema.model_validate(payload)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="The model response did not match the expected schema.") from exc
 
 
-def parse_evaluation(response: Any) -> AnswerEvaluation:
-    parsed = parse_structured_output(response)
+def structured_chat_completion(
+    client: Groq,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    schema: type[BaseModel],
+) -> BaseModel:
+    response = client.chat.completions.create(
+        model=model,
+        temperature=0.2,
+        response_format={"type": "json_object"},
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+
+    content = response.choices[0].message.content if response.choices else ""
+    return parse_json_response(content or "", schema)
+
+
+def evaluate_answer(client: Groq, question_text: str, transcript: str) -> AnswerEvaluation:
+    parsed = structured_chat_completion(
+        client=client,
+        model=get_scoring_model(),
+        system_prompt=(
+            "You are evaluating interview answers. "
+            "Return valid JSON with exactly these keys: score, feedback, improved_answer. "
+            "Score primarily for how well the answer addresses the question, how correct or relevant it is, "
+            "how complete it is, and how specific it is. Use a 0-10 scale where 10 is excellent, "
+            "5 is weak or partial, and 0 is irrelevant or missing. "
+            "For behavioral questions, judge relevance, structure, and specificity rather than factual correctness. "
+            "Keep feedback concise and actionable."
+        ),
+        user_prompt=(
+            f"Interview question:\n{question_text}\n\n"
+            f"Candidate transcript:\n{transcript}\n\n"
+            "Return JSON only."
+        ),
+        schema=AnswerEvaluation,
+    )
     if isinstance(parsed, AnswerEvaluation):
         return parsed
     raise HTTPException(status_code=502, detail="Could not parse scoring model output.")
 
 
-def parse_structured_output(response: Any) -> Any:
-    for output in getattr(response, "output", []):
-        if getattr(output, "type", None) != "message":
-            continue
-        for item in getattr(output, "content", []):
-            if getattr(item, "type", None) == "refusal":
-                raise HTTPException(status_code=502, detail=f"Model refused the request: {item.refusal}")
-            parsed = getattr(item, "parsed", None)
-            if parsed:
-                return parsed
-
-    raise HTTPException(status_code=502, detail="Could not parse structured model output.")
-
-
-def evaluate_answer(client: OpenAI, question_text: str, transcript: str) -> AnswerEvaluation:
-    response = client.responses.parse(
-        model=get_scoring_model(),
-        input=[
-            {
-                "role": "system",
-                "content": (
-                    "You are evaluating interview answers. Score primarily for how well the answer addresses "
-                    "the question, how correct or relevant it is, how complete it is, and how specific it is. "
-                    "Use a 0-10 scale where 10 is excellent, 5 is weak/partial, and 0 is irrelevant or missing. "
-                    "For behavioral questions, judge relevance, structure, and specificity rather than factual correctness. "
-                    "Return concise, actionable feedback and a stronger rewritten answer."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Interview question:\n{question_text}\n\n"
-                    f"Candidate transcript:\n{transcript}\n\n"
-                    "Return a score, concise feedback, and an improved answer."
-                ),
-            },
-        ],
-        text_format=AnswerEvaluation,
-    )
-    return parse_evaluation(response)
-
-
-def generate_questions(client: OpenAI, resume_text: str, job_description: str) -> GeneratedQuestions:
-    response = client.responses.parse(
+def generate_questions(client: Groq, resume_text: str, job_description: str) -> GeneratedQuestions:
+    parsed = structured_chat_completion(
+        client=client,
         model=get_question_generation_model(),
-        input=[
-            {
-                "role": "system",
-                "content": (
-                    "You generate interview practice question sets for an AI interview platform. "
-                    "Return exactly 2 intro questions, 3 resume-based questions, and 5 core questions. "
-                    "Questions must be concise, realistic, and useful for a live mock interview."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Resume text:\n{resume_text or 'No resume provided.'}\n\n"
-                    f"Job description:\n{job_description or 'No job description provided.'}\n\n"
-                    "Generate the full question set."
-                ),
-            },
-        ],
-        text_format=GeneratedQuestions,
+        system_prompt=(
+            "You generate interview practice question sets for an AI interview platform. "
+            "Return valid JSON with exactly these keys: intro_questions, resume_based_questions, core_questions. "
+            "Return exactly 2 intro questions, 3 resume-based questions, and 5 core questions. "
+            "Questions must be concise, realistic, and useful for a live mock interview."
+        ),
+        user_prompt=(
+            f"Resume text:\n{resume_text or 'No resume provided.'}\n\n"
+            f"Job description:\n{job_description or 'No job description provided.'}\n\n"
+            "Return JSON only."
+        ),
+        schema=GeneratedQuestions,
     )
-
-    parsed = parse_structured_output(response)
     if isinstance(parsed, GeneratedQuestions):
         return parsed
     raise HTTPException(status_code=502, detail="Could not parse generated questions.")
 
 
-def transcribe_audio(client: OpenAI, payload: bytes, filename: str) -> tuple[str, list[WordTimestamp]]:
-    audio_buffer = BytesIO(payload)
-    audio_buffer.name = filename or "answer.wav"
-    transcription = client.audio.transcriptions.create(
-        model=get_transcription_model(),
-        file=audio_buffer,
-        response_format="verbose_json",
-        timestamp_granularities=["word"],
-        prompt=TRANSCRIPTION_PROMPT,
-    )
-    return extract_word_timestamps(transcription)
+def map_groq_error(exc: Exception, action: str) -> HTTPException:
+    status_code = int(getattr(exc, "status_code", 0) or 0)
+    message = str(exc).lower()
+
+    if status_code == 429 or "rate limit" in message or "quota" in message:
+        return HTTPException(status_code=503, detail=f"Groq quota is exhausted while {action}.")
+    if status_code == 408 or "timed out" in message or "timeout" in message:
+        return HTTPException(status_code=504, detail=f"Groq timed out while {action}.")
+    if status_code >= 500:
+        return HTTPException(status_code=502, detail=f"Groq returned a server error while {action}.")
+    if status_code >= 400:
+        return HTTPException(status_code=502, detail=f"Groq returned an error while {action}: {status_code}.")
+    return HTTPException(status_code=502, detail=f"The AI service could not reach Groq while {action}.")
 
 
 def transcribe_audio_locally(payload: bytes, filename: str) -> tuple[str, list[WordTimestamp]]:
@@ -366,8 +361,7 @@ def health():
     local_whisper = get_local_whisper()
     return {
         "status": "ok",
-        "openai_configured": bool(os.getenv("OPENAI_API_KEY", "").strip()),
-        "transcription_model": get_transcription_model(),
+        "groq_configured": bool(os.getenv("GROQ_API_KEY", "").strip()),
         "scoring_model": get_scoring_model(),
         "question_generation_model": get_question_generation_model(),
         "local_transcription_engine": "faster-whisper",
@@ -434,31 +428,24 @@ async def analyze(
             "improved_answer": "Start with one clear point, add one concrete example, and end with the result.",
         }
 
-    client = get_openai_client(api_key)
+    client = get_groq_client(api_key)
+    local_whisper = get_local_whisper()
     try:
-        transcript, words = transcribe_audio(client, payload, file.filename or "answer.wav")
+        transcript, words = await asyncio.wait_for(
+            asyncio.to_thread(transcribe_audio_locally, payload, file.filename or "answer.wav"),
+            timeout=local_whisper.timeout_seconds,
+        )
         metrics = compute_metrics(words, transcript, duration)
         evaluation = evaluate_answer(client, question_text, transcript)
-    except RateLimitError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="OpenAI quota is exhausted for the configured API key.",
-        ) from exc
-    except APITimeoutError as exc:
+    except asyncio.TimeoutError as exc:
         raise HTTPException(
             status_code=504,
-            detail="OpenAI request timed out while analyzing the answer.",
+            detail=f"Local Faster-Whisper transcription timed out after {local_whisper.timeout_seconds} seconds.",
         ) from exc
-    except APIConnectionError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail="The analysis service could not reach OpenAI.",
-        ) from exc
-    except APIStatusError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"OpenAI returned an error while analyzing the answer: {exc.status_code}.",
-        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise map_groq_error(exc, "analyzing the answer") from exc
 
     return {
         "transcript": transcript,
@@ -483,28 +470,12 @@ async def generate_questions_endpoint(
     if not resume_text.strip() and not job_description.strip():
         raise HTTPException(status_code=400, detail="Resume text or job description is required.")
 
-    client = get_openai_client(api_key)
+    client = get_groq_client(api_key)
     try:
         questions = generate_questions(client, resume_text.strip(), job_description.strip())
-    except RateLimitError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="OpenAI quota is exhausted for the configured API key.",
-        ) from exc
-    except APITimeoutError as exc:
-        raise HTTPException(
-            status_code=504,
-            detail="OpenAI request timed out while generating questions.",
-        ) from exc
-    except APIConnectionError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail="The question generation service could not reach OpenAI.",
-        ) from exc
-    except APIStatusError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"OpenAI returned an error while generating questions: {exc.status_code}.",
-        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise map_groq_error(exc, "generating questions") from exc
 
     return questions.model_dump()

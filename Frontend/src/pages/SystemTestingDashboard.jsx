@@ -216,7 +216,7 @@ function SystemTestingDashboard() {
       return;
     }
 
-    setQuestionStatus(createStatus("loading", "Generating questions with GPT..."));
+    setQuestionStatus(createStatus("loading", "Generating questions with Groq..."));
 
     try {
       const response = await runTestingQuestionGeneration({
@@ -260,7 +260,7 @@ function SystemTestingDashboard() {
         </div>
         <div className="stat-card-modern">
           <h4>Question Test</h4>
-          <div className="stat-label-modern">Resume and job description to grouped GPT questions</div>
+          <div className="stat-label-modern">Resume and job description to grouped Groq questions</div>
         </div>
       </div>
 
@@ -332,7 +332,7 @@ function SystemTestingDashboard() {
 
         <TestSectionCard
           title="3. Resume -> Question Generation Test"
-          description="Paste resume context and an optional job description to verify GPT-powered question generation grouped by section."
+          description="Paste resume context and an optional job description to verify Groq-powered question generation grouped by section."
           status={questionStatus}
         >
           <label className="label-modern">

@@ -58,3 +58,5 @@ backend/uploads/audio/*
 !backend/uploads/audio/.gitkeep
 backend/uploads/video/*
 !backend/uploads/video/.gitkeep
+
+start-all.ps1

@@ -73,7 +73,7 @@ function Settings() {
         <div className="settings-row-modern">
           <div>
             <label className="label-modern">API Key</label>
-            <p className="hint-modern">Optional. Keep this only if you want the FastAPI/OpenAI-powered features.</p>
+            <p className="hint-modern">Optional. Keep this only if you want the FastAPI Groq-powered features.</p>
           </div>
           <input
             type="password"

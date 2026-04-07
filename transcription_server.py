@@ -212,7 +212,7 @@ async def transcribe(
 
 
 @app.post("/v1/audio/transcriptions")
-async def openai_compatible_transcribe(
+async def compatibility_transcribe(
     file: UploadFile = File(...),
     model: str = Form("whisper-1"),
     language: str | None = Form(None),
