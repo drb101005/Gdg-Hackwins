@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { createInterview, getSystemHealth } from "../services/api";
@@ -21,12 +21,6 @@ function Home() {
 
   const navigate = useNavigate();
   const { user } = useAuth();
-
-  const freeRemaining = useMemo(
-    () => Math.max(0, 3 - Number(user?.interviews_used || 0)),
-    [user],
-  );
-  const needsApiKey = freeRemaining === 0 && !user?.api_key;
 
   useEffect(() => {
     getSystemHealth()
@@ -90,16 +84,12 @@ function Home() {
       </div>
 
       <div className="card-modern">
-        <h3>Usage Gate</h3>
+        <h3>Session History</h3>
         <p className="hint-modern">
-          Free local interviews remaining: <strong>{freeRemaining}</strong>
+          Total interviews created: <strong>{Number(user?.interviews_used || 0)}</strong>
         </p>
         <p className="hint-modern">
-          {freeRemaining > 0
-            ? "You can create your first three interviews without an API key."
-            : user?.api_key
-              ? "API key detected. You can continue creating interviews."
-              : "Add an API key in Settings to continue after the free limit."}
+          Start as many interview sessions as you need. Local STT handles transcript metrics directly from the saved WAV answers.
         </p>
       </div>
 
@@ -114,10 +104,10 @@ function Home() {
         </p>
         <p className="hint-modern">
           {systemStatus.loading
-            ? "FastAPI status pending."
+            ? "Optional AI service status pending."
             : systemStatus.aiReady
-              ? "FastAPI audio processing is reachable."
-              : "FastAPI is unavailable. Interviews still run, but results will use a safe fallback response."}
+              ? "Optional FastAPI services are reachable."
+              : "FastAPI is unavailable. Interview transcripts and metrics still run through the local STT pipeline."}
         </p>
         {systemStatus.warnings.map((warning) => (
           <p key={warning} className="hint-modern">
@@ -189,13 +179,9 @@ function Home() {
       <button
         className="btn-primary-modern start-session-btn"
         onClick={handleStart}
-        disabled={isSubmitting || needsApiKey || !systemStatus.backendReady}
+        disabled={isSubmitting || !systemStatus.backendReady}
       >
-        {isSubmitting
-          ? "Preparing..."
-          : needsApiKey
-            ? "Add API Key in Settings"
-            : "Begin Session"}
+        {isSubmitting ? "Preparing..." : "Begin Session"}
       </button>
     </div>
   );

@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.InterviewsModule = void 0;
 const common_1 = require("@nestjs/common");
 const auth_module_1 = require("../auth/auth.module");
+const local_stt_module_1 = require("../local-stt/local-stt.module");
 const interviews_controller_1 = require("./interviews.controller");
 const interviews_service_1 = require("./interviews.service");
 let InterviewsModule = class InterviewsModule {
@@ -16,7 +17,7 @@ let InterviewsModule = class InterviewsModule {
 exports.InterviewsModule = InterviewsModule;
 exports.InterviewsModule = InterviewsModule = __decorate([
     (0, common_1.Module)({
-        imports: [auth_module_1.AuthModule],
+        imports: [auth_module_1.AuthModule, local_stt_module_1.LocalSttModule],
         controllers: [interviews_controller_1.InterviewsController],
         providers: [interviews_service_1.InterviewsService],
         exports: [interviews_service_1.InterviewsService],

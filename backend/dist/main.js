@@ -37,7 +37,7 @@ async function bootstrap() {
         logger.log(`FastAPI service reachable at ${aiServiceUrl}`);
     }
     else {
-        logger.warn(`FastAPI service unavailable at startup (${aiHealth.message}). Audio processing will use safe fallbacks.`);
+        logger.warn(`FastAPI service unavailable at startup (${aiHealth.message}). Local STT will still power transcript metrics, but FastAPI-only features remain unavailable.`);
     }
     await app.listen(port);
     logger.log(`Backend listening on http://127.0.0.1:${port}`);

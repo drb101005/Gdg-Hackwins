@@ -9,8 +9,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import { pingJsonHealth } from "../common/system-checks";
 import { DatabaseService } from "../database/database.service";
+import { LocalSttService } from "../local-stt/local-stt.service";
 import type { AuthUser } from "../common/auth-user";
 
 type InterviewRow = {
@@ -25,6 +25,13 @@ type InterviewRow = {
   current_question_index: number;
   completed: number;
   created_at: string;
+};
+
+type InterviewScoreRow = {
+  interview_id: string;
+  completed: number;
+  status: string;
+  current_question_index: number;
 };
 
 type QuestionRow = {
@@ -80,11 +87,11 @@ const ALLOWED_AUDIO_TYPES = new Set([
 @Injectable()
 export class InterviewsService {
   private readonly logger = new Logger(InterviewsService.name);
-  private readonly aiBaseUrl = process.env.AI_SERVICE_URL || "http://127.0.0.1:8000";
-  private aiHealthLastCheckedAt = 0;
-  private aiHealthCachedResult = true;
 
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly localSttService: LocalSttService,
+  ) {}
 
   async createInterview(
     user: AuthUser,
@@ -98,10 +105,6 @@ export class InterviewsService {
     const latestUser = await this.getUser(user.id);
     if (!latestUser) {
       throw new ForbiddenException("User not found.");
-    }
-
-    if (latestUser.interviews_used >= 3 && !latestUser.api_key) {
-      throw new BadRequestException("Free interview limit reached. Add an API key to continue.");
     }
 
     const type = payload.type?.trim() || "Tech";
@@ -350,61 +353,91 @@ export class InterviewsService {
         continue;
       }
 
-      const analysis = await this.processAnswer(
-        question.question_text,
-        answer.audio_path,
-        Number(answer.duration || 30),
-        interviewOwner?.api_key || null,
-      );
-      await this.databaseService.execute(
-        `
-          UPDATE answers
-          SET transcript = ?, word_timestamps_json = ?, wpm = ?, pause_count = ?, filler_count = ?,
-              silence_percent = ?, duration = ?, score = ?, feedback = ?, improved_answer = ?
-          WHERE question_id = ?
-        `,
-        [
-          analysis.transcript,
-          JSON.stringify(analysis.word_timestamps || []),
-          analysis.wpm,
-          analysis.pause_count,
-          analysis.filler_count,
-          analysis.silence_percent,
-          analysis.duration,
-          analysis.score,
-          analysis.feedback,
-          analysis.improved_answer,
-          question.id,
-        ],
-      );
+      await this.analyzeAndPersistAnswer(question, answer, interviewOwner?.api_key || null);
     }
-
-    const scoredAnswers = await this.databaseService.query<Array<{ score: number }>[number]>(
-      `
-        SELECT a.score
-        FROM answers a
-        JOIN questions q ON q.id = a.question_id
-        WHERE q.interview_id = ? AND a.score IS NOT NULL
-      `,
-      [interviewId],
-    );
-
-    const totalScore =
-      scoredAnswers.length > 0
-        ? scoredAnswers.reduce((sum, entry) => sum + Number(entry.score || 0), 0) / scoredAnswers.length
-        : 0;
-
-    await this.databaseService.execute(
-      `
-        UPDATE interviews
-        SET status = 'completed', completed = 1, total_score = ?, current_question_index = ?
-        WHERE id = ?
-      `,
-      [totalScore, questions.length, interviewId],
-    );
+    await this.refreshInterviewScore(interviewId, {
+      status: "completed",
+      completed: true,
+      currentQuestionIndex: questions.length,
+    });
 
     return {
       interview: await this.getInterviewForUser(interviewId, user),
+    };
+  }
+
+  async reprocessAllStoredAnswers() {
+    const rows = await this.databaseService.query<
+      Array<
+        {
+          interview_id: string;
+          user_id: string;
+          question_id: string;
+          question_text: string;
+          audio_path: string;
+          duration: number | null;
+          api_key: string | null;
+        }
+      >[number]
+    >(
+      `
+        SELECT
+          q.interview_id,
+          i.user_id,
+          q.id AS question_id,
+          q.question_text,
+          a.audio_path,
+          a.duration,
+          u.api_key
+        FROM answers a
+        JOIN questions q ON q.id = a.question_id
+        JOIN interviews i ON i.id = q.interview_id
+        JOIN users u ON u.id = i.user_id
+        WHERE a.audio_path IS NOT NULL AND a.audio_path <> ''
+        ORDER BY i.created_at ASC, q.order_index ASC
+      `,
+    );
+
+    const interviewIds = new Set<string>();
+    let processed = 0;
+
+    for (const row of rows) {
+      const answer: AnswerRow = {
+        id: "",
+        question_id: row.question_id,
+        audio_path: row.audio_path,
+        video_path: null,
+        transcript: null,
+        word_timestamps_json: null,
+        wpm: null,
+        pause_count: null,
+        filler_count: null,
+        silence_percent: null,
+        duration: row.duration,
+        score: null,
+        feedback: null,
+        improved_answer: null,
+        created_at: "",
+      };
+      const question: QuestionRow = {
+        id: row.question_id,
+        interview_id: row.interview_id,
+        question_text: row.question_text,
+        order_index: 0,
+      };
+
+      await this.analyzeAndPersistAnswer(question, answer, row.api_key || null);
+      interviewIds.add(row.interview_id);
+      processed += 1;
+    }
+
+    for (const interviewId of interviewIds) {
+      await this.refreshInterviewScore(interviewId);
+    }
+
+    return {
+      processed_answers: processed,
+      updated_interviews: interviewIds.size,
     };
   }
 
@@ -633,8 +666,9 @@ export class InterviewsService {
     duration: number,
     apiKey?: string | null,
   ): Promise<AnswerAnalysis> {
+    void apiKey;
     const absoluteAudioPath = join(this.databaseService.baseDir, relativeAudioPath);
-    const fallback = this.buildMockAnalysis(questionText, basename(relativeAudioPath), duration);
+    const fallback = this.buildMockAnalysis(questionText, basename(relativeAudioPath), duration || 30);
 
     if (!relativeAudioPath.toLowerCase().endsWith(".wav")) {
       return this.buildSilentAnalysis(duration || 30);
@@ -653,47 +687,26 @@ export class InterviewsService {
         return this.buildSilentAnalysis(duration || 30);
       }
 
-      const aiServiceAvailable = await this.isAIServiceAvailable();
-      if (!aiServiceAvailable) {
-        this.logger.warn(`FastAPI service unavailable while processing ${relativeAudioPath}. Using safe fallback.`);
-        return this.buildServiceUnavailableAnalysis(duration || 30);
+      this.logger.log(`Running local STT for ${relativeAudioPath}`);
+      const transcription = await this.localSttService.transcribeAudioFile(absoluteAudioPath);
+      if (!transcription.transcript.trim() || transcription.word_timestamps.length === 0) {
+        return this.buildSilentAnalysis(duration || 30);
       }
 
-      this.logger.log(`Calling FastAPI for ${relativeAudioPath}`);
-      const analysisFormData = new FormData();
-      analysisFormData.append("file", new File([audioBytes], basename(relativeAudioPath), { type: "audio/wav" }));
-      analysisFormData.append("question_text", questionText);
-      analysisFormData.append("duration", String(duration || 30));
-      if (apiKey?.trim()) {
-        analysisFormData.append("api_key", apiKey.trim());
-      }
-
-      const analysisResponse = await fetch(`${this.aiBaseUrl}/analyze`, {
-        method: "POST",
-        body: analysisFormData,
-      });
-
-      if (!analysisResponse.ok) {
-        this.logger.warn(`FastAPI processing failed for ${relativeAudioPath}. Returning safe fallback analysis.`);
-        return this.buildServiceUnavailableAnalysis(duration || 30);
-      }
-
-      const analysisData = (await analysisResponse.json()) as Partial<AnswerAnalysis>;
-
-      return {
-        transcript: analysisData.transcript || fallback.transcript,
-        word_timestamps: Array.isArray(analysisData.word_timestamps) ? analysisData.word_timestamps : fallback.word_timestamps,
-        wpm: analysisData.wpm ?? fallback.wpm,
-        pause_count: analysisData.pause_count ?? fallback.pause_count,
-        filler_count: analysisData.filler_count ?? fallback.filler_count,
-        silence_percent: analysisData.silence_percent ?? fallback.silence_percent,
-        duration: analysisData.duration ?? fallback.duration,
-        score: analysisData.score ?? fallback.score,
-        feedback: analysisData.feedback || fallback.feedback,
-        improved_answer: analysisData.improved_answer || fallback.improved_answer,
-      };
-    } catch (_error) {
-      this.logger.warn(`Unexpected processing failure for ${relativeAudioPath}. Returning mock fallback.`);
+      const metrics = this.computeMetrics(transcription.word_timestamps, transcription.transcript, duration || 30);
+      return this.scoreAnalysis(
+        questionText,
+        transcription.transcript,
+        transcription.word_timestamps,
+        metrics.wpm,
+        metrics.pause_count,
+        metrics.filler_count,
+        metrics.silence_percent,
+        metrics.duration,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Local STT failed for ${relativeAudioPath}. Returning mock fallback. ${message}`);
       return fallback;
     }
   }
@@ -716,22 +729,6 @@ export class InterviewsService {
       feedback: "No answer detected. Please retry and speak clearly for the full response window.",
       improved_answer:
         "Start with a concise headline, explain one concrete example, and close with the result so the response feels complete.",
-    };
-  }
-
-  private buildServiceUnavailableAnalysis(duration: number): AnswerAnalysis {
-    return {
-      transcript: "Processing service unavailable, try again.",
-      word_timestamps: [],
-      wpm: 0,
-      pause_count: 0,
-      filler_count: 0,
-      silence_percent: 100,
-      duration,
-      score: 0,
-      feedback: "Processing service unavailable, try again once the local FastAPI service is running.",
-      improved_answer:
-        "Retry after the processing service is restored so the platform can generate a transcript and coached answer.",
     };
   }
 
@@ -764,6 +761,162 @@ export class InterviewsService {
     };
   }
 
+  private async analyzeAndPersistAnswer(
+    question: Pick<QuestionRow, "id" | "question_text">,
+    answer: Pick<AnswerRow, "audio_path" | "duration">,
+    apiKey?: string | null,
+  ) {
+    const analysis = await this.processAnswer(
+      question.question_text,
+      answer.audio_path,
+      Number(answer.duration || 30),
+      apiKey || null,
+    );
+
+    await this.databaseService.execute(
+      `
+        UPDATE answers
+        SET transcript = ?, word_timestamps_json = ?, wpm = ?, pause_count = ?, filler_count = ?,
+            silence_percent = ?, duration = ?, score = ?, feedback = ?, improved_answer = ?
+        WHERE question_id = ?
+      `,
+      [
+        analysis.transcript,
+        JSON.stringify(analysis.word_timestamps || []),
+        analysis.wpm,
+        analysis.pause_count,
+        analysis.filler_count,
+        analysis.silence_percent,
+        analysis.duration,
+        analysis.score,
+        analysis.feedback,
+        analysis.improved_answer,
+        question.id,
+      ],
+    );
+  }
+
+  private async refreshInterviewScore(
+    interviewId: string,
+    overrides?: {
+      status?: string;
+      completed?: boolean;
+      currentQuestionIndex?: number;
+    },
+  ) {
+    const scoredAnswers = await this.databaseService.query<Array<{ score: number }>[number]>(
+      `
+        SELECT a.score
+        FROM answers a
+        JOIN questions q ON q.id = a.question_id
+        WHERE q.interview_id = ? AND a.score IS NOT NULL
+      `,
+      [interviewId],
+    );
+    const questionCountRow = await this.databaseService.queryOne<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM questions WHERE interview_id = ?",
+      [interviewId],
+    );
+    const interview = await this.databaseService.queryOne<InterviewScoreRow>(
+      "SELECT id AS interview_id, completed, status, current_question_index FROM interviews WHERE id = ? LIMIT 1",
+      [interviewId],
+    );
+
+    const totalScore =
+      scoredAnswers.length > 0
+        ? scoredAnswers.reduce((sum, entry) => sum + Number(entry.score || 0), 0) / scoredAnswers.length
+        : 0;
+
+    await this.databaseService.execute(
+      `
+        UPDATE interviews
+        SET status = ?, completed = ?, total_score = ?, current_question_index = ?
+        WHERE id = ?
+      `,
+      [
+        overrides?.status || interview?.status || "active",
+        overrides?.completed !== undefined ? Number(overrides.completed) : Number(interview?.completed || 0),
+        totalScore,
+        overrides?.currentQuestionIndex ??
+          Number((interview?.current_question_index ?? questionCountRow?.count) || 0),
+        interviewId,
+      ],
+    );
+  }
+
+  private computeMetrics(words: WordTimestamp[], transcript: string, duration: number) {
+    const normalizedDuration = this.normalizeDuration(duration, words);
+    const transcriptWords = transcript.match(/\b[\w']+\b/g) || [];
+    const spokenWordCount = transcriptWords.length;
+    const wpm = normalizedDuration > 0 ? Number(((spokenWordCount / normalizedDuration) * 60).toFixed(1)) : 0;
+
+    const pauseThreshold = Number(process.env.AI_PAUSE_THRESHOLD_SECONDS || 0.75);
+    let pauseCount = 0;
+    for (const [index, current] of words.entries()) {
+      const following = words[index + 1];
+      if (!following) {
+        continue;
+      }
+
+      const gap = Math.max(0, following.start - current.end);
+      if (gap >= pauseThreshold) {
+        pauseCount += 1;
+      }
+    }
+
+    const spokenSeconds = words.reduce((sum, word) => sum + Math.max(0, word.end - word.start), 0);
+    const silencePercent =
+      normalizedDuration > 0
+        ? Number((((Math.max(0, normalizedDuration - spokenSeconds)) / normalizedDuration) * 100).toFixed(1))
+        : 0;
+
+    return {
+      wpm,
+      pause_count: pauseCount,
+      filler_count: this.computeFillerCount(transcript),
+      silence_percent: silencePercent,
+      duration: Number(normalizedDuration.toFixed(2)),
+    };
+  }
+
+  private normalizeDuration(duration: number, words: WordTimestamp[]) {
+    if (Number.isFinite(duration) && duration > 0) {
+      return duration;
+    }
+
+    if (!words.length) {
+      return 0;
+    }
+
+    return Math.max(words[words.length - 1].end, 0);
+  }
+
+  private computeFillerCount(transcript: string) {
+    const normalized = transcript.toLowerCase();
+    const fillerWords = new Set([
+      "um",
+      "uh",
+      "erm",
+      "hmm",
+      "like",
+      "basically",
+      "actually",
+      "literally",
+      "okay",
+      "right",
+      "so",
+    ]);
+    const fillerPhrases = ["you know", "i mean", "kind of", "sort of"];
+
+    const tokenCount = (normalized.match(/\b[\w']+\b/g) || []).filter((token) => fillerWords.has(token)).length;
+    const phraseCount = fillerPhrases.reduce((sum, phrase) => {
+      const matches = normalized.match(new RegExp(`\\b${phrase.replace(/\s+/g, "\\s+")}\\b`, "g"));
+      return sum + (matches?.length || 0);
+    }, 0);
+
+    return tokenCount + phraseCount;
+  }
+
   private validateUpload(file: Express.Multer.File, kind: "audio" | "video") {
     const maxSize = kind === "audio" ? MAX_AUDIO_BYTES : MAX_VIDEO_BYTES;
     const extension = extname(file.originalname || "").toLowerCase();
@@ -783,18 +936,6 @@ export class InterviewsService {
     if (file.size > maxSize) {
       throw new BadRequestException(`The ${kind} file is too large.`);
     }
-  }
-
-  private async isAIServiceAvailable() {
-    const now = Date.now();
-    if (now - this.aiHealthLastCheckedAt < 5000) {
-      return this.aiHealthCachedResult;
-    }
-
-    const health = await pingJsonHealth(this.aiBaseUrl, 1200);
-    this.aiHealthLastCheckedAt = now;
-    this.aiHealthCachedResult = health.available;
-    return this.aiHealthCachedResult;
   }
 
   private isSilentWav(audioBytes: Buffer) {

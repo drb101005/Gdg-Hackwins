@@ -15,25 +15,37 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TestingController = void 0;
 const common_1 = require("@nestjs/common");
 const platform_express_1 = require("@nestjs/platform-express");
+const promises_1 = require("node:fs/promises");
+const node_path_1 = require("node:path");
 const current_user_decorator_1 = require("../common/current-user.decorator");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const system_checks_1 = require("../common/system-checks");
+const local_stt_service_1 = require("../local-stt/local-stt.service");
 let TestingController = class TestingController {
+    localSttService;
     aiBaseUrl = String(process.env.AI_SERVICE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
     allowedTestEmail = (process.env.TEST_USER_EMAIL || "test@gmail.com").trim().toLowerCase();
+    backendRoot = (0, system_checks_1.resolveBackendRoot)();
+    constructor(localSttService) {
+        this.localSttService = localSttService;
+    }
     async transcribeAudio(user, body, audio) {
         this.assertTestingAccess(user);
+        void body;
         if (!audio?.buffer?.length) {
             throw new common_1.HttpException("Audio recording is required.", 400);
         }
-        const duration = Number(body.duration || 30);
-        const formData = new FormData();
-        formData.append("file", new File([new Uint8Array(audio.buffer)], audio.originalname || "testing-audio.wav", { type: "audio/wav" }));
-        formData.append("duration", String(Number.isFinite(duration) && duration > 0 ? duration : 30));
-        const response = await this.forwardToAIService("/transcribe", formData);
-        return {
-            transcript: response.text || "",
-            word_timestamps: Array.isArray(response.word_timestamps) ? response.word_timestamps : [],
-        };
+        const tempPath = await this.writeTempFile(audio);
+        try {
+            const response = await this.localSttService.transcribeAudioFile(tempPath);
+            return {
+                transcript: response.transcript || "",
+                word_timestamps: Array.isArray(response.word_timestamps) ? response.word_timestamps : [],
+            };
+        }
+        finally {
+            await (0, promises_1.unlink)(tempPath).catch(() => undefined);
+        }
     }
     async generateQuestions(user, body) {
         this.assertTestingAccess(user);
@@ -80,6 +92,14 @@ let TestingController = class TestingController {
             throw new common_1.ServiceUnavailableException(`AI testing service unavailable at ${this.aiBaseUrl}. Start the FastAPI service on /health and retry. ${details}`.trim());
         }
     }
+    async writeTempFile(audio) {
+        const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${audio.originalname || "testing-audio.wav"}`;
+        const uploadDir = (0, node_path_1.join)(this.backendRoot, "uploads", "audio");
+        const tempPath = (0, node_path_1.join)(uploadDir, fileName);
+        await (0, promises_1.mkdir)(uploadDir, { recursive: true });
+        await (0, promises_1.writeFile)(tempPath, audio.buffer);
+        return tempPath;
+    }
 };
 exports.TestingController = TestingController;
 __decorate([
@@ -102,5 +122,6 @@ __decorate([
 ], TestingController.prototype, "generateQuestions", null);
 exports.TestingController = TestingController = __decorate([
     (0, common_1.Controller)("testing"),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard)
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __metadata("design:paramtypes", [local_stt_service_1.LocalSttService])
 ], TestingController);

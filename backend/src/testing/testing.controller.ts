@@ -10,15 +10,22 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { CurrentUser } from "../common/current-user.decorator";
 import type { AuthUser } from "../common/auth-user";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
+import { resolveBackendRoot } from "../common/system-checks";
+import { LocalSttService } from "../local-stt/local-stt.service";
 
 @Controller("testing")
 @UseGuards(JwtAuthGuard)
 export class TestingController {
   private readonly aiBaseUrl = String(process.env.AI_SERVICE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
   private readonly allowedTestEmail = (process.env.TEST_USER_EMAIL || "test@gmail.com").trim().toLowerCase();
+  private readonly backendRoot = resolveBackendRoot();
+
+  constructor(private readonly localSttService: LocalSttService) {}
 
   @Post("transcription")
   @UseInterceptors(FileInterceptor("audio"))
@@ -28,28 +35,23 @@ export class TestingController {
     @UploadedFile() audio?: Express.Multer.File,
   ) {
     this.assertTestingAccess(user);
+    void body;
 
     if (!audio?.buffer?.length) {
       throw new HttpException("Audio recording is required.", 400);
     }
 
-    const duration = Number(body.duration || 30);
-    const formData = new FormData();
-    formData.append(
-      "file",
-      new File([new Uint8Array(audio.buffer)], audio.originalname || "testing-audio.wav", { type: "audio/wav" }),
-    );
-    formData.append("duration", String(Number.isFinite(duration) && duration > 0 ? duration : 30));
+    const tempPath = await this.writeTempFile(audio);
+    try {
+      const response = await this.localSttService.transcribeAudioFile(tempPath);
 
-    const response = await this.forwardToAIService("/transcribe", formData) as {
-      text?: string;
-      word_timestamps?: unknown[];
-    };
-
-    return {
-      transcript: response.text || "",
-      word_timestamps: Array.isArray(response.word_timestamps) ? response.word_timestamps : [],
-    };
+      return {
+        transcript: response.transcript || "",
+        word_timestamps: Array.isArray(response.word_timestamps) ? response.word_timestamps : [],
+      };
+    } finally {
+      await unlink(tempPath).catch(() => undefined);
+    }
   }
 
   @Post("questions")
@@ -114,5 +116,14 @@ export class TestingController {
         `AI testing service unavailable at ${this.aiBaseUrl}. Start the FastAPI service on /health and retry. ${details}`.trim(),
       );
     }
+  }
+
+  private async writeTempFile(audio: Express.Multer.File) {
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${audio.originalname || "testing-audio.wav"}`;
+    const uploadDir = join(this.backendRoot, "uploads", "audio");
+    const tempPath = join(uploadDir, fileName);
+    await mkdir(uploadDir, { recursive: true });
+    await writeFile(tempPath, audio.buffer);
+    return tempPath;
   }
 }

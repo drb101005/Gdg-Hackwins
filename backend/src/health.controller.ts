@@ -26,7 +26,7 @@ export class HealthController {
       message: "Backend is running.",
       data: {
         database: databaseReady ? "ok" : "error",
-        ai_service: aiHealth.available ? "ok" : "unavailable",
+        ai_service: aiHealth.available ? "ok" : "optional-unavailable",
         ffmpeg: ffmpeg.available ? "available" : "missing",
         warnings,
       },

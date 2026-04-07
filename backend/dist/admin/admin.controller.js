@@ -28,6 +28,12 @@ let AdminController = class AdminController {
         }
         return this.interviewsService.getAdminOverview();
     }
+    async reprocessInterviews(user) {
+        if (user.role !== "admin") {
+            throw new common_1.ForbiddenException("Admin access required.");
+        }
+        return this.interviewsService.reprocessAllStoredAnswers();
+    }
 };
 exports.AdminController = AdminController;
 __decorate([
@@ -37,6 +43,13 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AdminController.prototype, "getOverview", null);
+__decorate([
+    (0, common_1.Post)("reprocess-interviews"),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "reprocessInterviews", null);
 exports.AdminController = AdminController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)("admin"),

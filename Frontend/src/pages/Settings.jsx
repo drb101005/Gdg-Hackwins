@@ -65,15 +65,15 @@ function Settings() {
         <div className="settings-row-modern">
           <div>
             <label className="label-modern">Current Plan</label>
-            <p className="hint-modern">Interviews used: {user?.interviews_used || 0}</p>
+            <p className="hint-modern">Interviews created: {user?.interviews_used || 0}</p>
           </div>
-          <span className="plan-badge-modern">Free Plan</span>
+          <span className="plan-badge-modern">Local Unlimited</span>
         </div>
 
         <div className="settings-row-modern">
           <div>
             <label className="label-modern">API Key</label>
-            <p className="hint-modern">Required after the first three interviews.</p>
+            <p className="hint-modern">Optional. Keep this only if you want the FastAPI/OpenAI-powered features.</p>
           </div>
           <input
             type="password"
