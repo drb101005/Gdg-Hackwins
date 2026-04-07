@@ -27,6 +27,7 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
     databaseService;
     localSttService;
     logger = new common_1.Logger(InterviewsService_1.name);
+    aiBaseUrl = String(process.env.AI_SERVICE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
     constructor(databaseService, localSttService) {
         this.databaseService = databaseService;
         this.localSttService = localSttService;
@@ -41,7 +42,13 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
         const resumeText = payload.resumeText?.trim() || "";
         const jobDescription = payload.jobDescription?.trim() || "";
         const interviewId = (0, node_crypto_1.randomUUID)();
-        const questions = this.generateQuestions({ type, difficulty, resumeText, jobDescription });
+        const questions = await this.generateQuestions({
+            type,
+            difficulty,
+            resumeText,
+            jobDescription,
+            apiKey: latestUser.api_key || null,
+        });
         await this.databaseService.transaction(async (tx) => {
             await tx.execute(`
           INSERT INTO interviews
@@ -100,8 +107,13 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             .slice()
             .reverse()
             .map((interview, index) => ({
+            id: interview.id,
             label: `Session ${index + 1}`,
             score: Number(interview.total_score || 0),
+            created_at: interview.created_at,
+            question_count: interview.questions.length,
+            difficulty: interview.difficulty,
+            type: interview.type,
         }));
         const improvementPercent = trend.length >= 2 && trend[0].score > 0
             ? Math.max(0, ((trend[trend.length - 1].score - trend[0].score) / trend[0].score) * 100)
@@ -112,6 +124,7 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             totalSessions,
             improvementPercent,
             trend,
+            interviews: trend.slice().reverse(),
         };
     }
     async getInterviewForUser(interviewId, user) {
@@ -395,7 +408,22 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             return ".webm";
         return ".wav";
     }
-    generateQuestions({ type, difficulty, resumeText, jobDescription, }) {
+    async generateQuestions({ type, difficulty, resumeText, jobDescription, apiKey, }) {
+        if (resumeText.trim() || jobDescription.trim()) {
+            try {
+                return await this.generateQuestionsWithAI({
+                    type,
+                    difficulty,
+                    resumeText,
+                    jobDescription,
+                    apiKey: apiKey || null,
+                });
+            }
+            catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.logger.warn(`AI question generation failed. Falling back to local question builder. ${message}`);
+            }
+        }
         const normalizedType = type.toLowerCase();
         const resumeHighlights = this.extractHighlights(resumeText, 3);
         const roleContext = this.extractHighlights(jobDescription, 1)[0] ||
@@ -425,6 +453,30 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             ];
         return [...introQuestions, ...resumeQuestions, ...coreQuestions];
     }
+    async generateQuestionsWithAI({ type, difficulty, resumeText, jobDescription, apiKey, }) {
+        const formData = new FormData();
+        formData.append("resume_text", resumeText);
+        formData.append("job_description", jobDescription);
+        formData.append("interview_type", type);
+        formData.append("difficulty", difficulty);
+        if (apiKey?.trim()) {
+            formData.append("api_key", apiKey.trim());
+        }
+        const response = await this.fetchAIService("/generate-questions", {
+            method: "POST",
+            body: formData,
+        });
+        const introQuestions = Array.isArray(response?.intro_questions) ? response.intro_questions : [];
+        const resumeQuestions = Array.isArray(response?.resume_based_questions) ? response.resume_based_questions : [];
+        const coreQuestions = Array.isArray(response?.core_questions) ? response.core_questions : [];
+        const combined = [...introQuestions, ...resumeQuestions, ...coreQuestions]
+            .map((item) => String(item || "").trim())
+            .filter(Boolean);
+        if (combined.length !== 10) {
+            throw new Error(`Expected 10 AI-generated questions, received ${combined.length}.`);
+        }
+        return combined;
+    }
     extractHighlights(text, limit) {
         return text
             .split(/\r?\n|\./)
@@ -433,7 +485,6 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             .slice(0, limit);
     }
     async processAnswer(questionText, relativeAudioPath, duration, apiKey) {
-        void apiKey;
         const absoluteAudioPath = (0, node_path_1.join)(this.databaseService.baseDir, relativeAudioPath);
         const fallback = this.buildMockAnalysis(questionText, (0, node_path_1.basename)(relativeAudioPath), duration || 30);
         if (!relativeAudioPath.toLowerCase().endsWith(".wav")) {
@@ -450,7 +501,14 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             if (this.isSilentWav(audioBytes)) {
                 return this.buildSilentAnalysis(duration || 30);
             }
-            this.logger.log(`Running local STT for ${relativeAudioPath}`);
+            try {
+                return await this.analyzeWithAIService(questionText, audioBytes, (0, node_path_1.basename)(relativeAudioPath), duration || 30, apiKey || null);
+            }
+            catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.logger.warn(`AI answer analysis failed for ${relativeAudioPath}. Falling back to local scoring. ${message}`);
+            }
+            this.logger.log(`Running local STT fallback for ${relativeAudioPath}`);
             const transcription = await this.localSttService.transcribeAudioFile(absoluteAudioPath);
             if (!transcription.transcript.trim() || transcription.word_timestamps.length === 0) {
                 return this.buildSilentAnalysis(duration || 30);
@@ -463,6 +521,32 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             this.logger.warn(`Local STT failed for ${relativeAudioPath}. Returning mock fallback. ${message}`);
             return fallback;
         }
+    }
+    async analyzeWithAIService(questionText, audioBytes, fileName, duration, apiKey) {
+        const formData = new FormData();
+        const audioArray = new Uint8Array(audioBytes);
+        formData.append("question_text", questionText);
+        formData.append("duration", String(duration));
+        formData.append("file", new Blob([audioArray], { type: "audio/wav" }), fileName || "answer.wav");
+        if (apiKey?.trim()) {
+            formData.append("api_key", apiKey.trim());
+        }
+        const payload = await this.fetchAIService("/analyze", {
+            method: "POST",
+            body: formData,
+        });
+        return {
+            transcript: String(payload?.transcript || ""),
+            word_timestamps: Array.isArray(payload?.word_timestamps) ? payload.word_timestamps : [],
+            wpm: Number(payload?.wpm || 0),
+            pause_count: Number(payload?.pause_count || 0),
+            filler_count: Number(payload?.filler_count || 0),
+            silence_percent: Number(payload?.silence_percent || 0),
+            duration: Number(payload?.duration || duration || 0),
+            score: Number(payload?.score || 0),
+            feedback: String(payload?.feedback || ""),
+            improved_answer: String(payload?.improved_answer || ""),
+        };
     }
     buildMockAnalysis(questionText, fileName, duration) {
         const transcript = `Mock transcript for ${fileName}. The candidate gave a focused answer about ${questionText.toLowerCase()}.`;
@@ -544,6 +628,17 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
                 Number((interview?.current_question_index ?? questionCountRow?.count) || 0),
             interviewId,
         ]);
+    }
+    async fetchAIService(path, options) {
+        const response = await fetch(`${this.aiBaseUrl}${path}`, options);
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+            const detail = payload && typeof payload === "object" && "detail" in payload
+                ? String(payload.detail)
+                : `AI service request failed with status ${response.status}.`;
+            throw new Error(detail);
+        }
+        return payload;
     }
     computeMetrics(words, transcript, duration) {
         const normalizedDuration = this.normalizeDuration(duration, words);

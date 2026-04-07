@@ -87,6 +87,7 @@ const ALLOWED_AUDIO_TYPES = new Set([
 @Injectable()
 export class InterviewsService {
   private readonly logger = new Logger(InterviewsService.name);
+  private readonly aiBaseUrl = String(process.env.AI_SERVICE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
 
   constructor(
     private readonly databaseService: DatabaseService,
@@ -112,7 +113,13 @@ export class InterviewsService {
     const resumeText = payload.resumeText?.trim() || "";
     const jobDescription = payload.jobDescription?.trim() || "";
     const interviewId = randomUUID();
-    const questions = this.generateQuestions({ type, difficulty, resumeText, jobDescription });
+    const questions = await this.generateQuestions({
+      type,
+      difficulty,
+      resumeText,
+      jobDescription,
+      apiKey: latestUser.api_key || null,
+    });
 
     await this.databaseService.transaction(async (tx) => {
       await tx.execute(
@@ -196,8 +203,13 @@ export class InterviewsService {
       .slice()
       .reverse()
       .map((interview, index) => ({
+        id: interview.id,
         label: `Session ${index + 1}`,
         score: Number(interview.total_score || 0),
+        created_at: interview.created_at,
+        question_count: interview.questions.length,
+        difficulty: interview.difficulty,
+        type: interview.type,
       }));
 
     const improvementPercent =
@@ -211,6 +223,7 @@ export class InterviewsService {
       totalSessions,
       improvementPercent,
       trend,
+      interviews: trend.slice().reverse(),
     };
   }
 
@@ -606,17 +619,34 @@ export class InterviewsService {
     return ".wav";
   }
 
-  private generateQuestions({
+  private async generateQuestions({
     type,
     difficulty,
     resumeText,
     jobDescription,
+    apiKey,
   }: {
     type: string;
     difficulty: string;
     resumeText: string;
     jobDescription: string;
+    apiKey?: string | null;
   }) {
+    if (resumeText.trim() || jobDescription.trim()) {
+      try {
+        return await this.generateQuestionsWithAI({
+          type,
+          difficulty,
+          resumeText,
+          jobDescription,
+          apiKey: apiKey || null,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`AI question generation failed. Falling back to local question builder. ${message}`);
+      }
+    }
+
     const normalizedType = type.toLowerCase();
     const resumeHighlights = this.extractHighlights(resumeText, 3);
     const roleContext =
@@ -652,6 +682,47 @@ export class InterviewsService {
     return [...introQuestions, ...resumeQuestions, ...coreQuestions];
   }
 
+  private async generateQuestionsWithAI({
+    type,
+    difficulty,
+    resumeText,
+    jobDescription,
+    apiKey,
+  }: {
+    type: string;
+    difficulty: string;
+    resumeText: string;
+    jobDescription: string;
+    apiKey?: string | null;
+  }) {
+    const formData = new FormData();
+    formData.append("resume_text", resumeText);
+    formData.append("job_description", jobDescription);
+    formData.append("interview_type", type);
+    formData.append("difficulty", difficulty);
+    if (apiKey?.trim()) {
+      formData.append("api_key", apiKey.trim());
+    }
+
+    const response = await this.fetchAIService("/generate-questions", {
+      method: "POST",
+      body: formData,
+    });
+
+    const introQuestions = Array.isArray(response?.intro_questions) ? response.intro_questions : [];
+    const resumeQuestions = Array.isArray(response?.resume_based_questions) ? response.resume_based_questions : [];
+    const coreQuestions = Array.isArray(response?.core_questions) ? response.core_questions : [];
+    const combined = [...introQuestions, ...resumeQuestions, ...coreQuestions]
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
+
+    if (combined.length !== 10) {
+      throw new Error(`Expected 10 AI-generated questions, received ${combined.length}.`);
+    }
+
+    return combined;
+  }
+
   private extractHighlights(text: string, limit: number) {
     return text
       .split(/\r?\n|\./)
@@ -666,7 +737,6 @@ export class InterviewsService {
     duration: number,
     apiKey?: string | null,
   ): Promise<AnswerAnalysis> {
-    void apiKey;
     const absoluteAudioPath = join(this.databaseService.baseDir, relativeAudioPath);
     const fallback = this.buildMockAnalysis(questionText, basename(relativeAudioPath), duration || 30);
 
@@ -687,7 +757,20 @@ export class InterviewsService {
         return this.buildSilentAnalysis(duration || 30);
       }
 
-      this.logger.log(`Running local STT for ${relativeAudioPath}`);
+      try {
+        return await this.analyzeWithAIService(
+          questionText,
+          audioBytes,
+          basename(relativeAudioPath),
+          duration || 30,
+          apiKey || null,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`AI answer analysis failed for ${relativeAudioPath}. Falling back to local scoring. ${message}`);
+      }
+
+      this.logger.log(`Running local STT fallback for ${relativeAudioPath}`);
       const transcription = await this.localSttService.transcribeAudioFile(absoluteAudioPath);
       if (!transcription.transcript.trim() || transcription.word_timestamps.length === 0) {
         return this.buildSilentAnalysis(duration || 30);
@@ -709,6 +792,41 @@ export class InterviewsService {
       this.logger.warn(`Local STT failed for ${relativeAudioPath}. Returning mock fallback. ${message}`);
       return fallback;
     }
+  }
+
+  private async analyzeWithAIService(
+    questionText: string,
+    audioBytes: Buffer,
+    fileName: string,
+    duration: number,
+    apiKey?: string | null,
+  ): Promise<AnswerAnalysis> {
+    const formData = new FormData();
+    const audioArray = new Uint8Array(audioBytes);
+    formData.append("question_text", questionText);
+    formData.append("duration", String(duration));
+    formData.append("file", new Blob([audioArray], { type: "audio/wav" }), fileName || "answer.wav");
+    if (apiKey?.trim()) {
+      formData.append("api_key", apiKey.trim());
+    }
+
+    const payload = await this.fetchAIService("/analyze", {
+      method: "POST",
+      body: formData,
+    });
+
+    return {
+      transcript: String(payload?.transcript || ""),
+      word_timestamps: Array.isArray(payload?.word_timestamps) ? payload.word_timestamps : [],
+      wpm: Number(payload?.wpm || 0),
+      pause_count: Number(payload?.pause_count || 0),
+      filler_count: Number(payload?.filler_count || 0),
+      silence_percent: Number(payload?.silence_percent || 0),
+      duration: Number(payload?.duration || duration || 0),
+      score: Number(payload?.score || 0),
+      feedback: String(payload?.feedback || ""),
+      improved_answer: String(payload?.improved_answer || ""),
+    };
   }
 
   private buildMockAnalysis(questionText: string, fileName: string, duration: number): AnswerAnalysis {
@@ -842,6 +960,21 @@ export class InterviewsService {
         interviewId,
       ],
     );
+  }
+
+  private async fetchAIService(path: string, options: RequestInit) {
+    const response = await fetch(`${this.aiBaseUrl}${path}`, options);
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      const detail =
+        payload && typeof payload === "object" && "detail" in payload
+          ? String(payload.detail)
+          : `AI service request failed with status ${response.status}.`;
+      throw new Error(detail);
+    }
+
+    return payload;
   }
 
   private computeMetrics(words: WordTimestamp[], transcript: string, duration: number) {

@@ -39,7 +39,7 @@ function Sidebar() {
           <line x1="6" y1="20" x2="6" y2="14"/>
         </svg>
       ),
-      label: 'Analytics'
+      label: 'Dashboard'
     },
     {
       path: '/settings',

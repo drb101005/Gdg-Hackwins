@@ -1,128 +1,119 @@
 import React, { useEffect, useState } from "react";
-import { getAnalyticsSummary } from "../services/api";
+import { Link } from "react-router-dom";
+import { getDashboardSummary } from "../services/api";
 
-function Analytics() {
+function Dashboard() {
   const [summary, setSummary] = useState({
     averageScore: 0,
-    totalQuestions: 0,
     totalSessions: 0,
-    improvementPercent: 0,
-    trend: [],
+    totalQuestions: 0,
+    interviews: [],
+    insight: "",
   });
   const [error, setError] = useState("");
-  const [animatedScore, setAnimatedScore] = useState(0);
+  const [avgScore, setAvgScore] = useState(0);
+  const [sessionCount, setSessionCount] = useState(0);
+  const [questionCount, setQuestionCount] = useState(0);
 
   useEffect(() => {
-    getAnalyticsSummary()
-      .then((response) => setSummary(response))
-      .catch((err) => setError(err.message || "Unable to load analytics."));
+    getDashboardSummary()
+      .then((response) => {
+        setSummary(response);
+      })
+      .catch((err) => {
+        setError(err.message || "Unable to load dashboard.");
+      });
   }, []);
 
   useEffect(() => {
     let i = 0;
     const interval = setInterval(() => {
-      i += 0.1;
-      setAnimatedScore(Math.min(summary.averageScore, i));
-      if (i >= summary.averageScore) {
+      i += 1;
+      setAvgScore((summary.averageScore * i) / 30);
+      setSessionCount(Math.min(summary.totalSessions, i));
+      setQuestionCount(Math.min(summary.totalQuestions, i * 3));
+
+      if (i >= 30) {
         clearInterval(interval);
       }
-    }, 20);
+    }, 30);
 
     return () => clearInterval(interval);
-  }, [summary.averageScore]);
+  }, [summary.averageScore, summary.totalQuestions, summary.totalSessions]);
 
-  const radius = 70;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (animatedScore / 10) * circumference;
-  const trendLabels = summary.trend.length ? summary.trend : [{ label: "Start" }, { label: "Now" }];
+  const getScoreLabel = (score) => {
+    if (score >= 8.5) return "Excellent";
+    if (score >= 7) return "Good";
+    return "Needs Improvement";
+  };
 
   return (
-    <div className="analytics-modern">
-      <div className="analytics-header-modern">
-        <h1>Performance Overview</h1>
-        <p>Analyze how you are improving across sessions.</p>
-      </div>
-
-      <div className="analytics-grid-modern">
-        <div className="analytics-card-modern ring-card">
-          <h3>Average Score</h3>
-
-          <div className="ring-wrapper-modern">
-            <svg width="180" height="180">
-              <circle
-                cx="90"
-                cy="90"
-                r={radius}
-                stroke="#e5e7eb"
-                strokeWidth="12"
-                fill="none"
-              />
-              <circle
-                cx="90"
-                cy="90"
-                r={radius}
-                stroke="var(--accent)"
-                strokeWidth="12"
-                fill="none"
-                strokeLinecap="round"
-                strokeDasharray={circumference}
-                strokeDashoffset={offset}
-                style={{ transition: "stroke-dashoffset 0.4s ease" }}
-                transform="rotate(-90 90 90)"
-              />
-            </svg>
-
-            <div className="ring-value-modern">
-              {animatedScore.toFixed(1)}
-              <span>/10</span>
-            </div>
-          </div>
+    <div className="dashboard-modern">
+      <div className="dashboard-header-modern">
+        <div>
+          <h1>Your Progress</h1>
+          <p>Track improvement over time and identify weak spots.</p>
         </div>
 
-        <div className="analytics-card-modern">
+        <Link to="/home" className="btn-primary-modern">
+          New Session
+        </Link>
+      </div>
+
+      <div className="stats-grid-modern">
+        <div className="stat-card-modern">
+          <h4>Average Score</h4>
+          <div className="stat-value-modern">{avgScore.toFixed(1)}</div>
+          <span className="stat-label-modern">{getScoreLabel(summary.averageScore)}</span>
+        </div>
+
+        <div className="stat-card-modern">
           <h4>Total Sessions</h4>
-          <div className="stat-big-modern">{summary.totalSessions}</div>
+          <div className="stat-value-modern">{sessionCount}</div>
         </div>
 
-        <div className="analytics-card-modern">
+        <div className="stat-card-modern">
           <h4>Questions Answered</h4>
-          <div className="stat-big-modern">{summary.totalQuestions}</div>
-        </div>
-
-        <div className="analytics-card-modern">
-          <h4>Improvement</h4>
-          <div className="stat-big-modern accent">
-            +{summary.improvementPercent.toFixed(0)}%
-          </div>
+          <div className="stat-value-modern">{questionCount}</div>
         </div>
       </div>
 
-      <div className="analytics-card-modern chart-card">
-        <h3>Performance Trend</h3>
-
-        <div className="chart-modern">
-          <div className="chart-line-modern" />
-
-          <div className="chart-labels-modern">
-            {trendLabels.map((item) => (
-              <span key={item.label}>{item.label}</span>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="analytics-insight-modern">
-        <h3>Insight</h3>
-        <p>
-          {summary.totalSessions
-            ? "Your average score is improving as you complete more local interview sessions. Keep answers specific and outcome-focused."
-            : "Finish an interview to start building your trend line."}
-        </p>
+      <div className="insight-card-modern">
+        <h3>Performance Insight</h3>
+        <p>{summary.insight || "Complete an interview to unlock tailored insights."}</p>
       </div>
 
       {error && <div className="error-text">{error}</div>}
+
+      <div className="sessions-modern">
+        <h3>Recent Sessions</h3>
+
+        {summary.interviews.map((session) => (
+          <Link
+            key={session.id}
+            className="session-row-modern"
+            to={session.completed ? `/summary/${session.id}` : "/interview"}
+            state={session.completed ? undefined : { interviewId: session.id }}
+          >
+            <div>
+              <strong>
+                {session.type} · {session.difficulty}
+              </strong>
+              <div className="session-meta-modern">
+                {new Date(session.created_at).toLocaleDateString()} · {session.status}
+              </div>
+            </div>
+
+            <div className="session-score-modern">
+              {session.total_score ? session.total_score.toFixed(1) : "In Progress"}
+            </div>
+          </Link>
+        ))}
+
+        {!summary.interviews.length && <p className="hint-modern">No interviews yet. Start one from the Home page.</p>}
+      </div>
     </div>
   );
 }
 
-export default Analytics;
+export default Dashboard;

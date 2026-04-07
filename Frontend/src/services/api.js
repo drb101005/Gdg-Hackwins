@@ -154,6 +154,13 @@ export function getAdminOverview() {
   return request("/admin/overview");
 }
 
+export function reprocessInterviews() {
+  return request("/admin/reprocess-interviews", {
+    method: "POST",
+    timeoutMs: 120000,
+  });
+}
+
 export function runTestingTranscription(payload) {
   return request("/testing/transcription", {
     method: "POST",

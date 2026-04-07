@@ -2,22 +2,27 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import WavAudioPlayer from "../components/WavAudioPlayer";
 import VideoPlayer from "../components/VideoPlayer";
-import { getAdminOverview } from "../services/api";
+import { getAdminOverview, reprocessInterviews } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 
 function Admin() {
   const { user } = useAuth();
   const [overview, setOverview] = useState({ users: [], interviews: [], answers: [] });
   const [error, setError] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [reprocessing, setReprocessing] = useState(false);
+
+  const loadOverview = () =>
+    getAdminOverview()
+      .then((response) => setOverview(response))
+      .catch((err) => setError(err.message || "Unable to load admin panel."));
 
   useEffect(() => {
     if (user?.role !== "admin") {
       return;
     }
 
-    getAdminOverview()
-      .then((response) => setOverview(response))
-      .catch((err) => setError(err.message || "Unable to load admin panel."));
+    loadOverview();
   }, [user?.role]);
 
   const counts = useMemo(
@@ -40,6 +45,24 @@ function Admin() {
     );
   }
 
+  const handleReprocess = async () => {
+    setError("");
+    setStatusMessage("");
+    setReprocessing(true);
+
+    try {
+      const response = await reprocessInterviews();
+      setStatusMessage(
+        `Reprocessed ${response.processed_answers || 0} answers across ${response.updated_interviews || 0} interviews.`,
+      );
+      await loadOverview();
+    } catch (err) {
+      setError(err.message || "Unable to reprocess interviews.");
+    } finally {
+      setReprocessing(false);
+    }
+  };
+
   return (
     <div className="dashboard-modern">
       <div className="dashboard-header-modern">
@@ -47,9 +70,13 @@ function Admin() {
           <h1>Admin Panel</h1>
           <p>Inspect users, open interviews, and review transcripts or media from the local demo environment.</p>
         </div>
+        <button className="btn-primary-modern" onClick={handleReprocess} disabled={reprocessing}>
+          {reprocessing ? "Reprocessing..." : "Reprocess Interviews"}
+        </button>
       </div>
 
       {error ? <div className="error-text">{error}</div> : null}
+      {statusMessage ? <div className="hint-modern">{statusMessage}</div> : null}
 
       <div className="stats-grid-modern">
         <div className="stat-card-modern">

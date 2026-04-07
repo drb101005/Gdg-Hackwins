@@ -110,16 +110,20 @@ function Interview() {
     }
   };
 
-  const speakQuestion = (text) => {
-    if (!("speechSynthesis" in window)) {
-      return;
-    }
+  const speakQuestion = (text) =>
+    new Promise((resolve) => {
+      if (!("speechSynthesis" in window)) {
+        resolve();
+        return;
+      }
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-  };
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1;
+      utterance.onend = () => resolve();
+      utterance.onerror = () => resolve();
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utterance);
+    });
 
   const ensureStream = async () => {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
@@ -286,11 +290,12 @@ function Interview() {
     setSecondsLeft(QUESTION_TIME_LIMIT);
     setRoundActive(true);
     setSessionPhase("preparing");
-    setMicStatus("Starting microphone...");
-    speakQuestion(questionText);
+    setMicStatus("Reading the question...");
 
     try {
       await Promise.all([ensureCameraPreview(), requestFullscreen()]);
+      await speakQuestion(questionText);
+      setMicStatus("Starting microphone...");
       await startRecording();
       clearTimer();
       timerRef.current = window.setInterval(() => {

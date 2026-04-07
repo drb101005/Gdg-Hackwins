@@ -1728,6 +1728,35 @@ button:disabled,
   animation: testing-spin 1s linear infinite;
 }
 
+.table-modern-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table-modern {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+
+.table-modern th,
+.table-modern td {
+  padding: 0.85rem 0.9rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.table-modern th {
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.table-modern td {
+  font-size: 0.96rem;
+}
+
 @keyframes testing-spin {
   from {
     transform: rotate(0deg);

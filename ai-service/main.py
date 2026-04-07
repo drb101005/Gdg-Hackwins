@@ -310,7 +310,13 @@ def evaluate_answer(client: Groq, question_text: str, transcript: str) -> Answer
     raise HTTPException(status_code=502, detail="Could not parse scoring model output.")
 
 
-def generate_questions(client: Groq, resume_text: str, job_description: str) -> GeneratedQuestions:
+def generate_questions(
+    client: Groq,
+    resume_text: str,
+    job_description: str,
+    interview_type: str = "",
+    difficulty: str = "",
+) -> GeneratedQuestions:
     parsed = structured_chat_completion(
         client=client,
         model=get_question_generation_model(),
@@ -318,9 +324,12 @@ def generate_questions(client: Groq, resume_text: str, job_description: str) -> 
             "You generate interview practice question sets for an AI interview platform. "
             "Return valid JSON with exactly these keys: intro_questions, resume_based_questions, core_questions. "
             "Return exactly 2 intro questions, 3 resume-based questions, and 5 core questions. "
-            "Questions must be concise, realistic, and useful for a live mock interview."
+            "Questions must be concise, realistic, and useful for a live mock interview. "
+            "Use the resume and job description heavily when they are provided."
         ),
         user_prompt=(
+            f"Interview type:\n{interview_type or 'General'}\n\n"
+            f"Difficulty:\n{difficulty or 'Medium'}\n\n"
             f"Resume text:\n{resume_text or 'No resume provided.'}\n\n"
             f"Job description:\n{job_description or 'No job description provided.'}\n\n"
             "Return JSON only."
@@ -465,6 +474,8 @@ async def analyze(
 async def generate_questions_endpoint(
     resume_text: str = Form(""),
     job_description: str = Form(""),
+    interview_type: str = Form(""),
+    difficulty: str = Form(""),
     api_key: str | None = Form(None),
 ):
     if not resume_text.strip() and not job_description.strip():
@@ -472,7 +483,13 @@ async def generate_questions_endpoint(
 
     client = get_groq_client(api_key)
     try:
-        questions = generate_questions(client, resume_text.strip(), job_description.strip())
+        questions = generate_questions(
+            client,
+            resume_text.strip(),
+            job_description.strip(),
+            interview_type.strip(),
+            difficulty.strip(),
+        )
     except HTTPException:
         raise
     except Exception as exc:
