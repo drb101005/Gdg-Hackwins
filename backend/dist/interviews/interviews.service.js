@@ -196,13 +196,14 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             throw new common_1.ForbiddenException("You do not have access to this interview.");
         }
         await this.databaseService.execute("UPDATE interviews SET status = 'processing' WHERE id = ?", [interviewId]);
+        const interviewOwner = await this.getUser(interview.user_id);
         const questions = await this.getQuestions(interviewId);
         for (const question of questions) {
             const answer = await this.databaseService.queryOne("SELECT * FROM answers WHERE question_id = ? LIMIT 1", [question.id]);
             if (!answer) {
                 continue;
             }
-            const analysis = await this.processAnswer(question.question_text, answer.audio_path, Number(answer.duration || 30));
+            const analysis = await this.processAnswer(question.question_text, answer.audio_path, Number(answer.duration || 30), interviewOwner?.api_key || null);
             await this.databaseService.execute(`
           UPDATE answers
           SET transcript = ?, word_timestamps_json = ?, wpm = ?, pause_count = ?, filler_count = ?,
@@ -407,7 +408,7 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             .filter((line) => line.length > 12)
             .slice(0, limit);
     }
-    async processAnswer(questionText, relativeAudioPath, duration) {
+    async processAnswer(questionText, relativeAudioPath, duration, apiKey) {
         const absoluteAudioPath = (0, node_path_1.join)(this.databaseService.baseDir, relativeAudioPath);
         const fallback = this.buildMockAnalysis(questionText, (0, node_path_1.basename)(relativeAudioPath), duration);
         if (!relativeAudioPath.toLowerCase().endsWith(".wav")) {
@@ -434,6 +435,9 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             analysisFormData.append("file", new File([audioBytes], (0, node_path_1.basename)(relativeAudioPath), { type: "audio/wav" }));
             analysisFormData.append("question_text", questionText);
             analysisFormData.append("duration", String(duration || 30));
+            if (apiKey?.trim()) {
+                analysisFormData.append("api_key", apiKey.trim());
+            }
             const analysisResponse = await fetch(`${this.aiBaseUrl}/analyze`, {
                 method: "POST",
                 body: analysisFormData,

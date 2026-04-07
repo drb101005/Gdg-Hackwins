@@ -338,6 +338,7 @@ export class InterviewsService {
       [interviewId],
     );
 
+    const interviewOwner = await this.getUser(interview.user_id);
     const questions = await this.getQuestions(interviewId);
     for (const question of questions) {
       const answer = await this.databaseService.queryOne<AnswerRow>(
@@ -349,7 +350,12 @@ export class InterviewsService {
         continue;
       }
 
-      const analysis = await this.processAnswer(question.question_text, answer.audio_path, Number(answer.duration || 30));
+      const analysis = await this.processAnswer(
+        question.question_text,
+        answer.audio_path,
+        Number(answer.duration || 30),
+        interviewOwner?.api_key || null,
+      );
       await this.databaseService.execute(
         `
           UPDATE answers
@@ -621,7 +627,12 @@ export class InterviewsService {
       .slice(0, limit);
   }
 
-  private async processAnswer(questionText: string, relativeAudioPath: string, duration: number): Promise<AnswerAnalysis> {
+  private async processAnswer(
+    questionText: string,
+    relativeAudioPath: string,
+    duration: number,
+    apiKey?: string | null,
+  ): Promise<AnswerAnalysis> {
     const absoluteAudioPath = join(this.databaseService.baseDir, relativeAudioPath);
     const fallback = this.buildMockAnalysis(questionText, basename(relativeAudioPath), duration);
 
@@ -653,6 +664,9 @@ export class InterviewsService {
       analysisFormData.append("file", new File([audioBytes], basename(relativeAudioPath), { type: "audio/wav" }));
       analysisFormData.append("question_text", questionText);
       analysisFormData.append("duration", String(duration || 30));
+      if (apiKey?.trim()) {
+        analysisFormData.append("api_key", apiKey.trim());
+      }
 
       const analysisResponse = await fetch(`${this.aiBaseUrl}/analyze`, {
         method: "POST",

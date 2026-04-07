@@ -5,6 +5,7 @@ import { clearStoredAuth, getStoredAuth } from "../services/auth";
 function Sidebar() {
   const location = useLocation();
   const user = getStoredAuth().user;
+  const canAccessTesting = user?.role === "admin" || user?.email === "test@gmail.com";
 
   const navItems = [
     {
@@ -50,6 +51,19 @@ function Sidebar() {
       ),
       label: 'Settings'
     },
+    ...(canAccessTesting
+      ? [{
+          path: '/system-testing',
+          icon: (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="9"/>
+              <path d="M12 8v4"/>
+              <path d="M12 16h.01"/>
+            </svg>
+          ),
+          label: 'System Testing'
+        }]
+      : []),
     ...(user?.role === "admin"
       ? [{
           path: '/admin',

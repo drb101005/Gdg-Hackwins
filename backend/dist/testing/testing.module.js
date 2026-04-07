@@ -6,19 +6,16 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AppModule = void 0;
+exports.TestingModule = void 0;
 const common_1 = require("@nestjs/common");
-const admin_module_1 = require("./admin/admin.module");
-const auth_module_1 = require("./auth/auth.module");
-const health_controller_1 = require("./health.controller");
-const interviews_module_1 = require("./interviews/interviews.module");
-const testing_module_1 = require("./testing/testing.module");
-let AppModule = class AppModule {
+const auth_module_1 = require("../auth/auth.module");
+const testing_controller_1 = require("./testing.controller");
+let TestingModule = class TestingModule {
 };
-exports.AppModule = AppModule;
-exports.AppModule = AppModule = __decorate([
+exports.TestingModule = TestingModule;
+exports.TestingModule = TestingModule = __decorate([
     (0, common_1.Module)({
-        imports: [auth_module_1.AuthModule, interviews_module_1.InterviewsModule, admin_module_1.AdminModule, testing_module_1.TestingModule],
-        controllers: [health_controller_1.HealthController],
+        imports: [auth_module_1.AuthModule],
+        controllers: [testing_controller_1.TestingController],
     })
-], AppModule);
+], TestingModule);

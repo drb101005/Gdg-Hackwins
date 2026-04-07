@@ -110,6 +110,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       await this.initializeDatabase();
       await this.initializeSchema();
       await this.seedAdminUser();
+      await this.seedTestUser();
       this.logger.log(`MySQL initialized at ${this.connectionSummary}`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -248,6 +249,36 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         VALUES (?, ?, ?, 0, NULL, ?, 'admin')
       `,
       [randomUUID(), email, passwordHash, "Local Admin"],
+    );
+  }
+
+  private async seedTestUser() {
+    const email = (process.env.TEST_USER_EMAIL || "test@gmail.com").trim().toLowerCase();
+    const password = process.env.TEST_USER_PASSWORD || "test123456";
+    const passwordHash = bcrypt.hashSync(password, 10);
+    const existing = await this.queryOne<{ id?: string }>(
+      "SELECT id FROM users WHERE email = ? LIMIT 1",
+      [email],
+    );
+
+    if (existing?.id) {
+      await this.execute(
+        `
+          UPDATE users
+          SET password_hash = ?, name = COALESCE(name, ?)
+          WHERE id = ?
+        `,
+        [passwordHash, "System Test User", existing.id],
+      );
+      return;
+    }
+
+    await this.execute(
+      `
+        INSERT INTO users (id, email, password_hash, interviews_used, api_key, name, role)
+        VALUES (?, ?, ?, 0, NULL, ?, 'student')
+      `,
+      [randomUUID(), email, passwordHash, "System Test User"],
     );
   }
 

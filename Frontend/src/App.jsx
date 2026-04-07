@@ -11,6 +11,7 @@ import Analytics from './pages/Analytics.jsx';
 import Settings from './pages/Settings.jsx';
 import Summary from './pages/Summary.jsx';
 import Admin from './pages/Admin.jsx';
+import SystemTestingDashboard from './pages/SystemTestingDashboard.jsx';
 import AppLayout from './components/AppLayout.jsx';
 import IntroAnimation from './components/IntroAnimation.jsx';
 
@@ -79,6 +80,7 @@ function App() {
             <Route path="/interview" element={<Interview />} />
             <Route path="/summary/:interviewId" element={<Summary />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/system-testing" element={<SystemTestingDashboard />} />
           </Route>
         </Routes>
       </div>

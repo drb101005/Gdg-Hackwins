@@ -153,3 +153,19 @@ export function completeInterview(interviewId) {
 export function getAdminOverview() {
   return request("/admin/overview");
 }
+
+export function runTestingTranscription(payload) {
+  return request("/testing/transcription", {
+    method: "POST",
+    body: payload,
+    timeoutMs: 60000,
+  });
+}
+
+export function runTestingQuestionGeneration(payload) {
+  return request("/testing/questions", {
+    method: "POST",
+    body: payload,
+    timeoutMs: 60000,
+  });
+}
