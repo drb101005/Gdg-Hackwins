@@ -79,6 +79,10 @@ function Summary() {
           <div className="stat-value-modern">{interview.status}</div>
         </div>
         <div className="stat-card-modern">
+          <h4>Question Source</h4>
+          <div className="stat-value-modern">{interview.question_source || "unknown"}</div>
+        </div>
+        <div className="stat-card-modern">
           <h4>Questions</h4>
           <div className="stat-value-modern">{interview.questions.length}</div>
         </div>
@@ -101,6 +105,13 @@ function Summary() {
                 <div>
                   <p className="hint-modern">Question {index + 1}</p>
                   <h3>{question.question_text}</h3>
+                  {Array.isArray(question.follow_ups) && question.follow_ups.length ? (
+                    <div className="hint-modern" style={{ marginTop: "0.5rem" }}>
+                      {question.follow_ups.map((followUp) => (
+                        <p key={followUp}>{followUp}</p>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="result-question-score-modern">{answer?.score ?? "Pending"}</div>
               </div>

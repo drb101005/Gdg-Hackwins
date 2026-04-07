@@ -49,14 +49,24 @@ let TestingController = class TestingController {
     }
     async generateQuestions(user, body) {
         this.assertTestingAccess(user);
-        const resumeText = body.resumeText?.trim() || "";
+        const role = body.role?.trim() || "";
+        const experienceLevel = body.experienceLevel?.trim() || "";
+        const interviewType = body.interviewType?.trim() || "technical";
+        const company = body.company?.trim() || "";
+        const resumeText = body.resumeData?.trim() || body.resumeText?.trim() || "";
         const jobDescription = body.jobDescription?.trim() || "";
-        if (!resumeText && !jobDescription) {
-            throw new common_1.HttpException("Add resume text or a job description before generating questions.", 400);
+        const focusAreas = body.focusAreas?.trim() || "";
+        if (!role && !experienceLevel && !interviewType && !company && !resumeText && !jobDescription && !focusAreas) {
+            throw new common_1.HttpException("Add some interview context before generating questions.", 400);
         }
         const formData = new FormData();
-        formData.append("resume_text", resumeText);
+        formData.append("role", role);
+        formData.append("experience_level", experienceLevel);
+        formData.append("interview_type", interviewType);
+        formData.append("company", company);
+        formData.append("resume_data", resumeText);
         formData.append("job_description", jobDescription);
+        formData.append("focus_areas", focusAreas);
         return this.forwardToAIService("/generate-questions", formData);
     }
     assertTestingAccess(user) {

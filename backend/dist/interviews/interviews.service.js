@@ -37,29 +37,50 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
         if (!latestUser) {
             throw new common_1.ForbiddenException("User not found.");
         }
-        const type = payload.type?.trim() || "Tech";
-        const difficulty = payload.difficulty?.trim() || "Medium";
-        const resumeText = payload.resumeText?.trim() || "";
+        const type = payload.interviewType?.trim() || payload.type?.trim() || "technical";
+        const difficulty = payload.experienceLevel?.trim() || payload.difficulty?.trim() || "Fresher";
+        const roleName = payload.role?.trim() || "";
+        const company = payload.company?.trim() || "";
+        const focusAreas = payload.focusAreas?.trim() || "";
+        const resumeText = payload.resumeData?.trim() || payload.resumeText?.trim() || "";
         const jobDescription = payload.jobDescription?.trim() || "";
         const interviewId = (0, node_crypto_1.randomUUID)();
-        const questions = await this.generateQuestions({
+        const generated = await this.generateQuestions({
+            role: roleName,
+            experienceLevel: difficulty,
             type,
-            difficulty,
+            company,
             resumeText,
             jobDescription,
+            focusAreas,
             apiKey: latestUser.api_key || null,
         });
+        const questions = generated.questions;
         await this.databaseService.transaction(async (tx) => {
             await tx.execute(`
           INSERT INTO interviews
-            (id, user_id, status, type, difficulty, resume_text, job_description, total_score, current_question_index, completed)
-          VALUES (?, ?, 'active', ?, ?, ?, ?, NULL, 0, 0)
-        `, [interviewId, user.id, type, difficulty, resumeText, jobDescription]);
+            (id, user_id, status, type, difficulty, role_name, company, focus_areas, question_source, resume_text, job_description, total_score, current_question_index, completed)
+          VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, 0)
+        `, [
+                interviewId,
+                user.id,
+                type,
+                difficulty,
+                roleName || null,
+                company || null,
+                focusAreas || null,
+                generated.question_source,
+                resumeText,
+                jobDescription,
+            ]);
             for (const [index, questionText] of questions.entries()) {
+                const followUpsJson = questionText.follow_ups.length
+                    ? JSON.stringify(questionText.follow_ups)
+                    : JSON.stringify([]);
                 await tx.execute(`
-            INSERT INTO questions (id, interview_id, question_text, order_index)
-            VALUES (?, ?, ?, ?)
-          `, [(0, node_crypto_1.randomUUID)(), interviewId, questionText, index]);
+            INSERT INTO questions (id, interview_id, question_text, follow_ups_json, order_index)
+            VALUES (?, ?, ?, ?, ?)
+          `, [(0, node_crypto_1.randomUUID)(), interviewId, questionText.question, followUpsJson, index]);
             }
             await tx.execute("UPDATE users SET interviews_used = interviews_used + 1 WHERE id = ?", [user.id]);
         });
@@ -312,7 +333,7 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
       `, [interview.id]);
         return {
             ...this.serializeInterview(interview),
-            questions,
+            questions: questions.map((question) => this.serializeQuestion(question)),
             answers: answers.map((answer) => this.serializeAnswer(answer)),
         };
     }
@@ -323,12 +344,25 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             status: interview.status,
             type: interview.type,
             difficulty: interview.difficulty,
+            role_name: interview.role_name || "",
+            company: interview.company || "",
+            focus_areas: interview.focus_areas || "",
+            question_source: interview.question_source || "fallback",
             resume_text: interview.resume_text || "",
             job_description: interview.job_description || "",
             total_score: interview.total_score ?? null,
             current_question_index: Number(interview.current_question_index || 0),
             completed: Boolean(interview.completed),
             created_at: interview.created_at,
+        };
+    }
+    serializeQuestion(question) {
+        return {
+            id: question.id,
+            interview_id: question.interview_id,
+            question_text: question.question_text,
+            follow_ups: this.parseFollowUps(question.follow_ups_json),
+            order_index: question.order_index,
         };
     }
     serializeAnswer(answer) {
@@ -352,7 +386,7 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
     }
     async getQuestions(interviewId) {
         return this.databaseService.query(`
-        SELECT id, interview_id, question_text, order_index
+        SELECT id, interview_id, question_text, follow_ups_json, order_index
         FROM questions
         WHERE interview_id = ?
         ORDER BY order_index ASC
@@ -408,60 +442,109 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
             return ".webm";
         return ".wav";
     }
-    async generateQuestions({ type, difficulty, resumeText, jobDescription, apiKey, }) {
-        if (resumeText.trim() || jobDescription.trim()) {
+    async generateQuestions({ role, experienceLevel, type, company, resumeText, jobDescription, focusAreas, apiKey, }) {
+        const hasInterviewContext = Boolean(role.trim() || company.trim() || focusAreas.trim() || resumeText.trim() || jobDescription.trim());
+        if (hasInterviewContext) {
             try {
                 return await this.generateQuestionsWithAI({
+                    role,
+                    experienceLevel,
                     type,
-                    difficulty,
+                    company,
                     resumeText,
                     jobDescription,
-                    apiKey: apiKey || null,
+                    focusAreas,
                 });
             }
             catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
-                this.logger.warn(`AI question generation failed. Falling back to local question builder. ${message}`);
+                this.logger.error(`AI question generation failed for contextual interview creation. ${message}`);
+                throw new common_1.ServiceUnavailableException(`AI question generation failed. The interview was not created, so you do not get fallback questions by accident. ${message}`);
             }
         }
         const normalizedType = type.toLowerCase();
         const resumeHighlights = this.extractHighlights(resumeText, 3);
         const roleContext = this.extractHighlights(jobDescription, 1)[0] ||
             (normalizedType.includes("hr") ? "people-focused teamwork" : "problem solving");
+        const roleSummary = role || "this role";
+        const companySummary = company || "the company";
+        const focusSummary = focusAreas || roleContext;
         const introQuestions = [
-            `Tell me about yourself and how your background fits a ${type} interview.`,
-            `What are you hoping to demonstrate in this ${difficulty} round today?`,
+            {
+                question: `Looking at your background for ${roleSummary}, which project best matches what ${companySummary} would need from you?`,
+                follow_ups: [],
+            },
+            {
+                question: `At your current ${experienceLevel} level, where do you think your experience is strongest for this ${type} round?`,
+                follow_ups: [],
+            },
         ];
         const resumeQuestions = Array.from({ length: 3 }, (_item, index) => {
             const highlight = resumeHighlights[index] || `a project or achievement most relevant to ${roleContext}`;
-            return `Walk me through ${highlight} and the impact it had.`;
+            return {
+                question: `Walk me through ${highlight} and the impact it had.`,
+                follow_ups: [],
+            };
         });
-        const coreQuestions = normalizedType.includes("hr")
+        const coreQuestions = (normalizedType.includes("hr")
             ? [
-                `Describe a time you handled conflict on a team while keeping the outcome positive.`,
-                `How do you prioritize work when multiple deadlines arrive at once?`,
-                `Tell me about a difficult piece of feedback and how you acted on it.`,
-                `What would your teammates say is your biggest strength at work?`,
-                `Why are you interested in a role centered on ${roleContext}?`,
+                {
+                    question: `Describe a time you handled conflict on a team while keeping the outcome positive.`,
+                    follow_ups: [],
+                },
+                {
+                    question: `How do you prioritize work when multiple deadlines arrive at once?`,
+                    follow_ups: [],
+                },
+                {
+                    question: `Tell me about a difficult piece of feedback and how you acted on it.`,
+                    follow_ups: [],
+                },
+                {
+                    question: `What kind of work environment helps you do your best work on a team?`,
+                    follow_ups: [],
+                },
+                {
+                    question: `Why does a role centered on ${roleContext} make sense for your next step?`,
+                    follow_ups: [],
+                },
             ]
             : [
-                `Explain a technical decision you made recently and the tradeoffs you considered.`,
-                `How would you debug a production issue that only appears under load?`,
-                `Describe how you would design a reliable feature related to ${roleContext}.`,
-                `What testing strategy would you use before shipping an important change?`,
-                `If performance becomes a bottleneck, what would you investigate first and why?`,
-            ];
-        return [...introQuestions, ...resumeQuestions, ...coreQuestions];
+                {
+                    question: `Explain a technical decision you made recently in your work on ${focusSummary}, and the trade-offs you considered.`,
+                    follow_ups: [],
+                },
+                {
+                    question: `How would you debug a production issue that only appears under load?`,
+                    follow_ups: [],
+                },
+                {
+                    question: `Describe how you would design a reliable feature related to ${roleContext}.`,
+                    follow_ups: [],
+                },
+                {
+                    question: `What testing strategy would you use before shipping an important change?`,
+                    follow_ups: [],
+                },
+                {
+                    question: `If performance becomes a bottleneck, what would you investigate first and why?`,
+                    follow_ups: [],
+                },
+            ]);
+        return {
+            questions: [...introQuestions, ...resumeQuestions, ...coreQuestions],
+            question_source: "fallback",
+        };
     }
-    async generateQuestionsWithAI({ type, difficulty, resumeText, jobDescription, apiKey, }) {
+    async generateQuestionsWithAI({ role, experienceLevel, type, company, resumeText, jobDescription, focusAreas, }) {
         const formData = new FormData();
-        formData.append("resume_text", resumeText);
-        formData.append("job_description", jobDescription);
+        formData.append("role", role);
+        formData.append("experience_level", experienceLevel);
         formData.append("interview_type", type);
-        formData.append("difficulty", difficulty);
-        if (apiKey?.trim()) {
-            formData.append("api_key", apiKey.trim());
-        }
+        formData.append("company", company);
+        formData.append("resume_data", resumeText);
+        formData.append("job_description", jobDescription);
+        formData.append("focus_areas", focusAreas);
         const response = await this.fetchAIService("/generate-questions", {
             method: "POST",
             body: formData,
@@ -470,12 +553,57 @@ let InterviewsService = InterviewsService_1 = class InterviewsService {
         const resumeQuestions = Array.isArray(response?.resume_based_questions) ? response.resume_based_questions : [];
         const coreQuestions = Array.isArray(response?.core_questions) ? response.core_questions : [];
         const combined = [...introQuestions, ...resumeQuestions, ...coreQuestions]
-            .map((item) => String(item || "").trim())
+            .map((item) => this.normalizeQuestionItem(item))
             .filter(Boolean);
-        if (combined.length !== 10) {
-            throw new Error(`Expected 10 AI-generated questions, received ${combined.length}.`);
+        if (combined.length === 0) {
+            throw new Error("AI returned no usable questions.");
         }
-        return combined;
+        return {
+            questions: combined,
+            question_source: response?.question_source === "fallback" ? "fallback" : "ai",
+        };
+    }
+    normalizeQuestionItem(item) {
+        if (typeof item === "string") {
+            const question = item.trim();
+            return question ? { question, follow_ups: [] } : null;
+        }
+        if (!item || typeof item !== "object") {
+            return null;
+        }
+        const candidate = item;
+        const question = typeof candidate.question === "string"
+            ? candidate.question.trim()
+            : "";
+        if (!question) {
+            return null;
+        }
+        const followUps = Array.isArray(candidate.follow_ups)
+            ? candidate.follow_ups
+                .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+                .filter(Boolean)
+            : [];
+        return {
+            question,
+            follow_ups: followUps,
+        };
+    }
+    parseFollowUps(raw) {
+        if (!raw) {
+            return [];
+        }
+        try {
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+                return [];
+            }
+            return parsed
+                .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+                .filter(Boolean);
+        }
+        catch (_error) {
+            return [];
+        }
     }
     extractHighlights(text, limit) {
         return text

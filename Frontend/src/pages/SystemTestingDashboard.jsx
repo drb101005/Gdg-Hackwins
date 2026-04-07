@@ -8,6 +8,29 @@ function createStatus(status = "idle", message = "Ready for testing.") {
   return { status, message };
 }
 
+function normalizeQuestionItem(item) {
+  if (typeof item === "string") {
+    return {
+      question: item,
+      follow_ups: [],
+    };
+  }
+
+  if (!item || typeof item !== "object") {
+    return {
+      question: "",
+      follow_ups: [],
+    };
+  }
+
+  return {
+    question: typeof item.question === "string" ? item.question : "",
+    follow_ups: Array.isArray(item.follow_ups)
+      ? item.follow_ups.filter((followUp) => typeof followUp === "string" && followUp.trim())
+      : [],
+  };
+}
+
 function SystemTestingDashboard() {
   const [audioStatus, setAudioStatus] = useState(createStatus("idle", "Record a sample and submit it to Whisper."));
   const [cameraStatus, setCameraStatus] = useState(createStatus("idle", "Start the webcam to verify camera access."));
@@ -25,8 +48,13 @@ function SystemTestingDashboard() {
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraInfo, setCameraInfo] = useState("Not detected");
 
+  const [role, setRole] = useState("");
+  const [experienceLevel, setExperienceLevel] = useState("Fresher");
+  const [interviewType, setInterviewType] = useState("technical");
+  const [company, setCompany] = useState("");
   const [resumeText, setResumeText] = useState("");
   const [jobDescription, setJobDescription] = useState("");
+  const [focusAreas, setFocusAreas] = useState("");
   const [generatedQuestions, setGeneratedQuestions] = useState({
     intro_questions: [],
     resume_based_questions: [],
@@ -220,8 +248,13 @@ function SystemTestingDashboard() {
 
     try {
       const response = await runTestingQuestionGeneration({
-        resumeText,
+        role,
+        experienceLevel,
+        interviewType,
+        company,
+        resumeData: resumeText,
         jobDescription,
+        focusAreas,
       });
       setGeneratedQuestions({
         intro_questions: Array.isArray(response?.intro_questions) ? response.intro_questions : [],
@@ -335,13 +368,63 @@ function SystemTestingDashboard() {
           description="Paste resume context and an optional job description to verify Groq-powered question generation grouped by section."
           status={questionStatus}
         >
+          <div className="settings-grid-modern">
+            <label className="label-modern">
+              Role
+              <input
+                className="input-modern"
+                value={role}
+                onChange={(event) => setRole(event.target.value)}
+                placeholder="Frontend Developer, SDE Intern..."
+              />
+            </label>
+
+            <label className="label-modern">
+              Experience Level
+              <select
+                className="input-modern"
+                value={experienceLevel}
+                onChange={(event) => setExperienceLevel(event.target.value)}
+              >
+                <option value="Fresher">Fresher</option>
+                <option value="1-3 years">1-3 years</option>
+                <option value="3+ years">3+ years</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="settings-grid-modern">
+            <label className="label-modern">
+              Interview Type
+              <select
+                className="input-modern"
+                value={interviewType}
+                onChange={(event) => setInterviewType(event.target.value)}
+              >
+                <option value="technical">Technical</option>
+                <option value="hr">HR</option>
+                <option value="behavioral">Behavioral</option>
+              </select>
+            </label>
+
+            <label className="label-modern">
+              Company
+              <input
+                className="input-modern"
+                value={company}
+                onChange={(event) => setCompany(event.target.value)}
+                placeholder="Optional target company"
+              />
+            </label>
+          </div>
+
           <label className="label-modern">
-            Resume Text
+            Resume Data
             <textarea
               className="textarea-modern"
               value={resumeText}
               onChange={(event) => setResumeText(event.target.value)}
-              placeholder="Paste resume summary, projects, achievements, and internships..."
+              placeholder="Paste projects, skills, tech stack, ownership, and implementation details..."
             />
           </label>
 
@@ -352,6 +435,16 @@ function SystemTestingDashboard() {
               value={jobDescription}
               onChange={(event) => setJobDescription(event.target.value)}
               placeholder="Optional role description, skills, responsibilities, or target company context..."
+            />
+          </label>
+
+          <label className="label-modern">
+            Focus Areas
+            <input
+              className="input-modern"
+              value={focusAreas}
+              onChange={(event) => setFocusAreas(event.target.value)}
+              placeholder="DSA, projects, system design..."
             />
           </label>
 
@@ -367,7 +460,21 @@ function SystemTestingDashboard() {
               <p className="interview-label-modern">Intro Questions</p>
               <ul className="testing-list">
                 {generatedQuestions.intro_questions.length
-                  ? generatedQuestions.intro_questions.map((question) => <li key={question}>{question}</li>)
+                  ? generatedQuestions.intro_questions.map((item, index) => {
+                      const question = normalizeQuestionItem(item);
+                      return (
+                        <li key={`${question.question || "intro"}-${index}`}>
+                          <span>{question.question}</span>
+                          {question.follow_ups.length ? (
+                            <ul className="testing-list" style={{ marginTop: "0.5rem" }}>
+                              {question.follow_ups.map((followUp, followUpIndex) => (
+                                <li key={`${followUp}-${followUpIndex}`}>{followUp}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </li>
+                      );
+                    })
                   : <li>No intro questions generated yet.</li>}
               </ul>
             </div>
@@ -376,7 +483,21 @@ function SystemTestingDashboard() {
               <p className="interview-label-modern">Resume-Based Questions</p>
               <ul className="testing-list">
                 {generatedQuestions.resume_based_questions.length
-                  ? generatedQuestions.resume_based_questions.map((question) => <li key={question}>{question}</li>)
+                  ? generatedQuestions.resume_based_questions.map((item, index) => {
+                      const question = normalizeQuestionItem(item);
+                      return (
+                        <li key={`${question.question || "resume"}-${index}`}>
+                          <span>{question.question}</span>
+                          {question.follow_ups.length ? (
+                            <ul className="testing-list" style={{ marginTop: "0.5rem" }}>
+                              {question.follow_ups.map((followUp, followUpIndex) => (
+                                <li key={`${followUp}-${followUpIndex}`}>{followUp}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </li>
+                      );
+                    })
                   : <li>No resume-based questions generated yet.</li>}
               </ul>
             </div>
@@ -385,7 +506,21 @@ function SystemTestingDashboard() {
               <p className="interview-label-modern">Core Questions</p>
               <ul className="testing-list">
                 {generatedQuestions.core_questions.length
-                  ? generatedQuestions.core_questions.map((question) => <li key={question}>{question}</li>)
+                  ? generatedQuestions.core_questions.map((item, index) => {
+                      const question = normalizeQuestionItem(item);
+                      return (
+                        <li key={`${question.question || "core"}-${index}`}>
+                          <span>{question.question}</span>
+                          {question.follow_ups.length ? (
+                            <ul className="testing-list" style={{ marginTop: "0.5rem" }}>
+                              {question.follow_ups.map((followUp, followUpIndex) => (
+                                <li key={`${followUp}-${followUpIndex}`}>{followUp}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </li>
+                      );
+                    })
                   : <li>No core questions generated yet.</li>}
               </ul>
             </div>

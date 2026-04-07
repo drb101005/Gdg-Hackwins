@@ -152,6 +152,10 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
           status VARCHAR(32) NOT NULL,
           type VARCHAR(64) NOT NULL,
           difficulty VARCHAR(32) NOT NULL,
+          role_name VARCHAR(255) NULL,
+          company VARCHAR(255) NULL,
+          focus_areas TEXT NULL,
+          question_source VARCHAR(32) NULL,
           resume_text LONGTEXT NULL,
           job_description LONGTEXT NULL,
           total_score DOUBLE NULL,
@@ -168,6 +172,7 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
           id VARCHAR(36) PRIMARY KEY,
           interview_id VARCHAR(36) NOT NULL,
           question_text TEXT NOT NULL,
+          follow_ups_json LONGTEXT NULL,
           order_index INT NOT NULL,
           INDEX idx_questions_interview_order (interview_id, order_index),
           CONSTRAINT fk_questions_interview
@@ -201,6 +206,11 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
         }
         await this.ensureColumnExists("answers", "word_timestamps_json", "LONGTEXT NULL");
         await this.ensureColumnExists("answers", "silence_percent", "DOUBLE NULL");
+        await this.ensureColumnExists("questions", "follow_ups_json", "LONGTEXT NULL");
+        await this.ensureColumnExists("interviews", "role_name", "VARCHAR(255) NULL");
+        await this.ensureColumnExists("interviews", "company", "VARCHAR(255) NULL");
+        await this.ensureColumnExists("interviews", "focus_areas", "TEXT NULL");
+        await this.ensureColumnExists("interviews", "question_source", "VARCHAR(32) NULL");
     }
     async seedAdminUser() {
         const email = (process.env.ADMIN_EMAIL || "admin@local.test").trim().toLowerCase();

@@ -44,7 +44,18 @@ export class InterviewsController {
   async create(
     @CurrentUser() user: AuthUser,
     @Body()
-    body: { type: string; difficulty: string; resumeText?: string; jobDescription?: string },
+    body: {
+      role?: string;
+      experienceLevel?: string;
+      interviewType?: string;
+      company?: string;
+      resumeData?: string;
+      jobDescription?: string;
+      focusAreas?: string;
+      type?: string;
+      difficulty?: string;
+      resumeText?: string;
+    },
   ) {
     return this.interviewsService.createInterview(user, body);
   }

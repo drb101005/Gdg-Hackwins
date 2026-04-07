@@ -66,10 +66,16 @@ class AnswerEvaluation(BaseModel):
     improved_answer: str
 
 
+class QuestionItem(BaseModel):
+    question: str
+    follow_ups: list[str] = Field(default_factory=list)
+
+
 class GeneratedQuestions(BaseModel):
-    intro_questions: list[str]
-    resume_based_questions: list[str]
-    core_questions: list[str]
+    intro_questions: list[QuestionItem]
+    resume_based_questions: list[QuestionItem]
+    core_questions: list[QuestionItem]
+    question_source: str = "ai"
 
 
 class LocalWhisperService:
@@ -312,26 +318,47 @@ def evaluate_answer(client: Groq, question_text: str, transcript: str) -> Answer
 
 def generate_questions(
     client: Groq,
-    resume_text: str,
+    role: str,
+    experience_level: str,
+    interview_type: str,
+    company: str,
+    resume_data: str,
     job_description: str,
-    interview_type: str = "",
-    difficulty: str = "",
+    focus_areas: str,
 ) -> GeneratedQuestions:
     parsed = structured_chat_completion(
         client=client,
         model=get_question_generation_model(),
         system_prompt=(
-            "You generate interview practice question sets for an AI interview platform. "
-            "Return valid JSON with exactly these keys: intro_questions, resume_based_questions, core_questions. "
-            "Return exactly 2 intro questions, 3 resume-based questions, and 5 core questions. "
-            "Questions must be concise, realistic, and useful for a live mock interview. "
-            "Use the resume and job description heavily when they are provided."
+            "You are a real interviewer conducting a live interview. "
+            "Ask questions like a human interviewer: short, direct, contextual, and grounded in the candidate's background. "
+            "Do not sound like an AI, teacher, or exam generator. "
+            "Return valid JSON only with exactly these keys: intro_questions, resume_based_questions, core_questions, question_source. "
+            "Each question item must include exactly these keys: question, follow_ups. "
+            "Always include follow_ups as an array, even if it is empty. "
+            "Set question_source to 'ai'. "
+            "Return exactly 2 intro questions, exactly 3 resume-based questions, and exactly 5 core questions. "
+            "At least 2 of the 8 non-intro questions should feel like deeper follow-up or probe questions, but they must still stay inside the resume-based and core groups so the total question count remains exactly 10. "
+            "Avoid generic prompts like tell me about yourself, strengths and weaknesses, or textbook theory questions. "
+            "At least 30 to 40 percent of the questions must directly reference the candidate's projects, technologies, implementation choices, or decisions from the resume data. "
+            "Questions should feel layered and conversational: start broad, go deeper, and probe decisions. "
+            "If a job description is provided, extract required skills and ask applied or gap-based questions tied to the role. "
+            "If a company is provided, adapt the style: product companies should get deeper why, trade-off, and product thinking questions; service companies should get clearer practical and fundamentals-oriented questions. "
+            "Keep each question to 1-2 lines. "
+            "Experience rules: fresher = basics and project explanation, 1 to 3 years = implementation and decisions, 3+ years = system design and trade-offs. "
+            "Interview type can be technical, HR, or behavioral and should shape the tone of the core questions. "
+            "Use focus areas when they are provided to bias the deeper questions. "
+            "Do not invent experience that is not present in the resume data or job description. "
+            "Ask questions that can later be evaluated for clarity, depth, structure, and relevance."
         ),
         user_prompt=(
-            f"Interview type:\n{interview_type or 'General'}\n\n"
-            f"Difficulty:\n{difficulty or 'Medium'}\n\n"
-            f"Resume text:\n{resume_text or 'No resume provided.'}\n\n"
+            f"Role:\n{role or 'General software role'}\n\n"
+            f"Experience level:\n{experience_level or 'Fresher'}\n\n"
+            f"Interview type:\n{interview_type or 'technical'}\n\n"
+            f"Company:\n{company or 'Not provided'}\n\n"
+            f"Resume data:\n{resume_data or 'No resume data provided.'}\n\n"
             f"Job description:\n{job_description or 'No job description provided.'}\n\n"
+            f"Focus areas:\n{focus_areas or 'Not provided'}\n\n"
             "Return JSON only."
         ),
         schema=GeneratedQuestions,
@@ -472,23 +499,39 @@ async def analyze(
 
 @app.post("/generate-questions")
 async def generate_questions_endpoint(
-    resume_text: str = Form(""),
-    job_description: str = Form(""),
+    role: str = Form(""),
+    experience_level: str = Form(""),
     interview_type: str = Form(""),
-    difficulty: str = Form(""),
+    company: str = Form(""),
+    resume_data: str = Form(""),
+    job_description: str = Form(""),
+    focus_areas: str = Form(""),
     api_key: str | None = Form(None),
 ):
-    if not resume_text.strip() and not job_description.strip():
-        raise HTTPException(status_code=400, detail="Resume text or job description is required.")
+    if not any(
+        [
+            role.strip(),
+            experience_level.strip(),
+            interview_type.strip(),
+            company.strip(),
+            resume_data.strip(),
+            job_description.strip(),
+            focus_areas.strip(),
+        ]
+    ):
+        raise HTTPException(status_code=400, detail="At least one interview context field is required.")
 
     client = get_groq_client(api_key)
     try:
         questions = generate_questions(
             client,
-            resume_text.strip(),
-            job_description.strip(),
+            role.strip(),
+            experience_level.strip(),
             interview_type.strip(),
-            difficulty.strip(),
+            company.strip(),
+            resume_data.strip(),
+            job_description.strip(),
+            focus_areas.strip(),
         )
     except HTTPException:
         raise

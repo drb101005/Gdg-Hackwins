@@ -519,6 +519,9 @@ function Interview() {
           <p className="topic-label">
             {interview.type} / {interview.difficulty}
           </p>
+          <p className="hint-modern">
+            Question source: {interview.question_source || "unknown"}
+          </p>
         </div>
 
         <div className={`timer-modern ${secondsLeft <= 5 && roundActive ? "timer-modern-warning" : ""}`}>
@@ -547,6 +550,13 @@ function Interview() {
             <div>
               <p className="hint-modern">Current Question</p>
               <h2>{currentQuestion.question_text}</h2>
+              {Array.isArray(currentQuestion.follow_ups) && currentQuestion.follow_ups.length ? (
+                <div className="hint-modern" style={{ marginTop: "0.75rem" }}>
+                  {currentQuestion.follow_ups.map((followUp) => (
+                    <p key={followUp}>{followUp}</p>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
 

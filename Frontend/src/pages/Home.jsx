@@ -5,10 +5,13 @@ import { createInterview, getSystemHealth } from "../services/api";
 import { updateStoredUser } from "../services/auth";
 
 function Home() {
-  const [interviewType, setInterviewType] = useState("Tech");
-  const [difficulty, setDifficulty] = useState("Medium");
-  const [resumeText, setResumeText] = useState("");
+  const [role, setRole] = useState("");
+  const [experienceLevel, setExperienceLevel] = useState("Fresher");
+  const [interviewType, setInterviewType] = useState("technical");
+  const [company, setCompany] = useState("");
+  const [resumeData, setResumeData] = useState("");
   const [jobDescription, setJobDescription] = useState("");
+  const [focusAreas, setFocusAreas] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [systemStatus, setSystemStatus] = useState({
@@ -51,10 +54,13 @@ function Home() {
 
     try {
       const response = await createInterview({
-        type: interviewType,
-        difficulty,
-        resumeText,
+        role,
+        experienceLevel,
+        interviewType,
+        company,
+        resumeData,
         jobDescription,
+        focusAreas,
       });
 
       if (response?.user) {
@@ -78,7 +84,7 @@ function Home() {
       <div className="home-header">
         <h1>Start a new session</h1>
         <p>
-          Create a local interview session, store everything in SQLite, and save
+          Create a local interview session, store everything in MySQL, and save
           each recording directly on this machine.
         </p>
       </div>
@@ -114,10 +120,38 @@ function Home() {
             {warning}
           </p>
         ))}
+        <p className="hint-modern">
+          When you provide resume or role context, interview creation now requires AI question generation to succeed.
+        </p>
       </div>
 
       <div className="card-modern">
         <h3>Interview Setup</h3>
+
+        <div className="settings-grid-modern">
+          <div>
+            <label className="label-modern">Role</label>
+            <input
+              value={role}
+              onChange={(event) => setRole(event.target.value)}
+              className="input-modern"
+              placeholder="Frontend Developer, SDE Intern, Backend Engineer..."
+            />
+          </div>
+
+          <div>
+            <label className="label-modern">Experience Level</label>
+            <select
+              value={experienceLevel}
+              onChange={(event) => setExperienceLevel(event.target.value)}
+              className="input-modern"
+            >
+              <option value="Fresher">Fresher</option>
+              <option value="1-3 years">1-3 years</option>
+              <option value="3+ years">3+ years</option>
+            </select>
+          </div>
+        </div>
 
         <div className="settings-grid-modern">
           <div>
@@ -127,37 +161,34 @@ function Home() {
               onChange={(event) => setInterviewType(event.target.value)}
               className="input-modern"
             >
-              <option value="Tech">Tech</option>
-              <option value="HR">HR</option>
+              <option value="technical">Technical</option>
+              <option value="hr">HR</option>
+              <option value="behavioral">Behavioral</option>
             </select>
           </div>
 
           <div>
-            <label className="label-modern">Difficulty</label>
-            <select
-              value={difficulty}
-              onChange={(event) => setDifficulty(event.target.value)}
+            <label className="label-modern">Company</label>
+            <input
+              value={company}
+              onChange={(event) => setCompany(event.target.value)}
               className="input-modern"
-            >
-              <option value="Easy">Easy</option>
-              <option value="Medium">Medium</option>
-              <option value="Hard">Hard</option>
-            </select>
+              placeholder="Optional target company"
+            />
           </div>
         </div>
 
         <label className="label-modern">
-          Resume Input
+          Resume Data
           <span className="hint-modern">
-            Used for the 2 intro questions, 3 resume-based questions, and the
-            core question set.
+            Include projects, skills, technologies, ownership, and decisions you want the interviewer to probe.
           </span>
         </label>
         <textarea
-          value={resumeText}
-          onChange={(event) => setResumeText(event.target.value)}
+          value={resumeData}
+          onChange={(event) => setResumeData(event.target.value)}
           className="textarea-modern"
-          placeholder="Paste your resume summary, projects, internships, or achievements..."
+          placeholder="Paste projects, tech stack, internships, impact, and implementation details..."
         />
 
         <label className="label-modern">
@@ -171,6 +202,19 @@ function Home() {
           onChange={(event) => setJobDescription(event.target.value)}
           className="textarea-modern"
           placeholder="Paste the job description or role requirements here..."
+        />
+
+        <label className="label-modern">
+          Focus Areas
+          <span className="hint-modern">
+            Optional. Example: DSA, projects, system design, debugging, API design.
+          </span>
+        </label>
+        <input
+          value={focusAreas}
+          onChange={(event) => setFocusAreas(event.target.value)}
+          className="input-modern"
+          placeholder="DSA, projects, system design..."
         />
       </div>
 
