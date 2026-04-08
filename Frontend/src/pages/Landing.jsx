@@ -172,7 +172,7 @@ function Landing() {
       </section>
 
       <footer className="footer-modern">
-        <p>Built for local demos with React, NestJS, SQLite, FastAPI, and local media storage</p>
+        <p>Build by SE - IT - B</p>
       </footer>
     </div>
   );

@@ -94,12 +94,12 @@ function Home() {
         <p className="hint-modern">
           Total interviews created: <strong>{Number(user?.interviews_used || 0)}</strong>
         </p>
-        <p className="hint-modern">
+        {/* <p className="hint-modern">
           Start as many interview sessions as you need. Local STT handles transcript metrics directly from the saved WAV answers.
-        </p>
+        </p> */}
       </div>
 
-      <div className="card-modern">
+      {/* <div className="card-modern">
         <h3>System Status</h3>
         <p className="hint-modern">
           {systemStatus.loading
@@ -123,7 +123,7 @@ function Home() {
         <p className="hint-modern">
           When you provide resume or role context, interview creation now requires AI question generation to succeed.
         </p>
-      </div>
+      </div> */}
 
       <div className="card-modern">
         <h3>Interview Setup</h3>

@@ -24,7 +24,7 @@ let HealthController = class HealthController {
         const ffmpeg = (0, system_checks_1.checkFfmpegAvailability)();
         const warnings = (0, system_checks_1.collectEnvironmentWarnings)(process.env);
         if (!ffmpeg.available) {
-            warnings.push("FFmpeg is not available. Browser-side WAV conversion is required on this machine.");
+            warnings.push("");
         }
         return {
             success: true,
