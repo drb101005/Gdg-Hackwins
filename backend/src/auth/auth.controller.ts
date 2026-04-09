@@ -18,6 +18,16 @@ export class AuthController {
     return this.authService.login(body);
   }
 
+  @Post("forgot-password")
+  async requestPasswordReset(@Body() body: { email: string }) {
+    return this.authService.requestPasswordReset(body);
+  }
+
+  @Post("reset-password")
+  async resetPassword(@Body() body: { token: string; password: string }) {
+    return this.authService.resetPassword(body);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get("me")
   async me(@CurrentUser() user: AuthUser) {

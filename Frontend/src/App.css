@@ -1016,6 +1016,23 @@ button:disabled,
   text-decoration: underline;
 }
 
+.auth-inline-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -0.25rem;
+}
+
+.success-text {
+  color: #15803d;
+  font-size: 0.92rem;
+}
+
+.helper-text {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 .w-full-modern {
   width: 100%;
 }

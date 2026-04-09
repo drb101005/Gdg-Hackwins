@@ -96,7 +96,7 @@ function Sidebar() {
               <path d="M2 12l10 5 10-5"/>
             </svg>
           </div>
-          Ace.ai
+          Skill Barter
         </Link>
       </div>
 

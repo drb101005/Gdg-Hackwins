@@ -86,22 +86,22 @@ function Settings() {
         </div>
       </div>
 
-      <div className="card-modern">
-        <h3>Preferences</h3>
+      {/* <div className="card-modern"> */}
+        {/* <h3>Preferences</h3> */}
 
         <div className="settings-row-modern">
-          <div>
+          {/* <div>
             <label className="label-modern">Push Notifications</label>
-            <p className="hint-modern">Reminders for scheduled sessions</p>
-          </div>
-          <input
+            <p className="hint-modern">Reminders for updates</p>
+          </div> */}
+          {/* <input
             type="checkbox"
             checked={notifications}
             onChange={(e) => setNotifications(e.target.checked)}
-          />
+          /> */}
         </div>
 
-        <div className="settings-row-modern">
+        {/* <div className="settings-row-modern">
           <div>
             <label className="label-modern">Email Digests</label>
             <p className="hint-modern">Weekly performance summaries</p>
@@ -111,8 +111,8 @@ function Settings() {
             checked={emailNotifications}
             onChange={(e) => setEmailNotifications(e.target.checked)}
           />
-        </div>
-      </div>
+        </div> */}
+      {/* </div> */}
 
       {statusMessage && <div className="hint-modern">{statusMessage}</div>}
 

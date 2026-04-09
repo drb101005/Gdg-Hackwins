@@ -83,6 +83,12 @@ function Login() {
             {errors.password ? <span className="error-text">{errors.password}</span> : null}
           </div>
 
+          <div className="auth-inline-actions">
+            <Link to="/forgot-password" className="auth-link-modern">
+              Forgot password?
+            </Link>
+          </div>
+
           {authError ? <div className="error-text">{authError}</div> : null}
 
           <button type="submit" className="btn-primary-modern w-full-modern" disabled={isSubmitting}>

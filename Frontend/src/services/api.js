@@ -96,6 +96,22 @@ export function login(payload) {
   });
 }
 
+export function requestPasswordReset(payload) {
+  return request("/auth/forgot-password", {
+    auth: false,
+    method: "POST",
+    body: payload,
+  });
+}
+
+export function resetPassword(payload) {
+  return request("/auth/reset-password", {
+    auth: false,
+    method: "POST",
+    body: payload,
+  });
+}
+
 export function getSystemHealth() {
   return request("/health", {
     auth: false,

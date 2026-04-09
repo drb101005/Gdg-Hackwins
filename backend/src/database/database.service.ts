@@ -225,6 +225,19 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
             FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
       `,
+      `
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+          id VARCHAR(36) PRIMARY KEY,
+          user_id VARCHAR(36) NOT NULL,
+          token_hash VARCHAR(64) NOT NULL UNIQUE,
+          expires_at DATETIME NOT NULL,
+          used_at DATETIME NULL,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_password_reset_user_id (user_id),
+          CONSTRAINT fk_password_reset_user
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `,
     ];
 
     for (const statement of statements) {
