@@ -1,4 +1,4 @@
-import { Controller, ForbiddenException, Get, Post, UseGuards } from "@nestjs/common";
+import { Controller, ForbiddenException, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { CurrentUser } from "../common/current-user.decorator";
 import type { AuthUser } from "../common/auth-user";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
@@ -25,5 +25,32 @@ export class AdminController {
     }
 
     return this.interviewsService.reprocessAllStoredAnswers();
+  }
+
+  @Post("interviews/:id/reprocess-audio")
+  async reprocessInterviewAudio(@CurrentUser() user: AuthUser, @Param("id") interviewId: string) {
+    if (user.role !== "admin") {
+      throw new ForbiddenException("Admin access required.");
+    }
+
+    return this.interviewsService.reprocessInterviewAudio(user, interviewId);
+  }
+
+  @Post("interviews/:id/reprocess-scores")
+  async reprocessInterviewScores(@CurrentUser() user: AuthUser, @Param("id") interviewId: string) {
+    if (user.role !== "admin") {
+      throw new ForbiddenException("Admin access required.");
+    }
+
+    return this.interviewsService.reprocessInterviewScores(user, interviewId);
+  }
+
+  @Post("interviews/:id/stop-processing")
+  async stopInterviewProcessing(@CurrentUser() user: AuthUser, @Param("id") interviewId: string) {
+    if (user.role !== "admin") {
+      throw new ForbiddenException("Admin access required.");
+    }
+
+    return this.interviewsService.stopInterviewProcessing(user, interviewId);
   }
 }

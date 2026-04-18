@@ -42,7 +42,7 @@ FILLER_PHRASES = [
 ]
 DEFAULT_PAUSE_THRESHOLD_SECONDS = 0.75
 DEFAULT_LOCAL_WHISPER_MODEL = "base"
-DEFAULT_LOCAL_WHISPER_TIMEOUT_SECONDS = 45
+DEFAULT_LOCAL_WHISPER_TIMEOUT_SECONDS = 180
 
 app = FastAPI(title="Interview Analysis Service")
 
@@ -76,6 +76,26 @@ class GeneratedQuestions(BaseModel):
     resume_based_questions: list[QuestionItem]
     core_questions: list[QuestionItem]
     question_source: str = "ai"
+
+
+class InterviewTurn(BaseModel):
+    question: str
+    answer: str
+
+
+class InterviewEvaluation(BaseModel):
+    overall_score: float = Field(ge=0, le=10)
+    overall_feedback: str
+
+
+class InterviewEvaluationRequest(BaseModel):
+    turns: list[InterviewTurn]
+    api_key: str | None = None
+
+
+class TextAnswerRequest(BaseModel):
+    question_text: str
+    answer_text: str
 
 
 class LocalWhisperService:
@@ -368,6 +388,29 @@ def generate_questions(
     raise HTTPException(status_code=502, detail="Could not parse generated questions.")
 
 
+def evaluate_interview(client: Groq, turns: list[InterviewTurn]) -> InterviewEvaluation:
+    parsed = structured_chat_completion(
+        client=client,
+        model=get_scoring_model(),
+        system_prompt=(
+            "You are evaluating an entire mock interview across multiple question-answer pairs. "
+            "Return valid JSON with exactly these keys: overall_score, overall_feedback. "
+            "Score from 0 to 10 based on relevance, correctness, specificity, clarity, structure, confidence, "
+            "and consistency across all answers. "
+            "The feedback must summarize strengths, weak spots, and the most important next improvement."
+        ),
+        user_prompt=(
+            "Interview transcript:\n"
+            f"{json.dumps([turn.model_dump() for turn in turns], ensure_ascii=True, indent=2)}\n\n"
+            "Return JSON only."
+        ),
+        schema=InterviewEvaluation,
+    )
+    if isinstance(parsed, InterviewEvaluation):
+        return parsed
+    raise HTTPException(status_code=502, detail="Could not parse interview evaluation output.")
+
+
 def map_groq_error(exc: Exception, action: str) -> HTTPException:
     status_code = int(getattr(exc, "status_code", 0) or 0)
     message = str(exc).lower()
@@ -385,6 +428,12 @@ def map_groq_error(exc: Exception, action: str) -> HTTPException:
 
 def transcribe_audio_locally(payload: bytes, filename: str) -> tuple[str, list[WordTimestamp]]:
     return get_local_whisper().transcribe_bytes(payload, filename)
+
+
+def get_local_transcription_timeout_seconds(duration: float, configured_timeout: int) -> int:
+    normalized_duration = max(0.0, float(duration or 0.0))
+    duration_based_timeout = int(normalized_duration * 2.0 + 30)
+    return max(configured_timeout, min(300, duration_based_timeout))
 
 
 @app.on_event("startup")
@@ -466,18 +515,28 @@ async def analyze(
 
     client = get_groq_client(api_key)
     local_whisper = get_local_whisper()
+    transcription_timeout = get_local_transcription_timeout_seconds(duration, local_whisper.timeout_seconds)
     try:
         transcript, words = await asyncio.wait_for(
             asyncio.to_thread(transcribe_audio_locally, payload, file.filename or "answer.wav"),
-            timeout=local_whisper.timeout_seconds,
+            timeout=transcription_timeout,
         )
-        metrics = compute_metrics(words, transcript, duration)
-        evaluation = evaluate_answer(client, question_text, transcript)
     except asyncio.TimeoutError as exc:
         raise HTTPException(
             status_code=504,
-            detail=f"Local Faster-Whisper transcription timed out after {local_whisper.timeout_seconds} seconds.",
+            detail=f"Local Faster-Whisper transcription timed out after {transcription_timeout} seconds.",
         ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Local Faster-Whisper transcription failed: {exc}",
+        ) from exc
+
+    try:
+        metrics = compute_metrics(words, transcript, duration)
+        evaluation = evaluate_answer(client, question_text, transcript)
     except HTTPException:
         raise
     except Exception as exc:
@@ -491,6 +550,38 @@ async def analyze(
         "filler_count": metrics["filler_count"],
         "silence_percent": metrics["silence_percent"],
         "duration": metrics["duration"],
+        "score": round(float(evaluation.score), 1),
+        "feedback": evaluation.feedback,
+        "improved_answer": evaluation.improved_answer,
+    }
+
+
+@app.post("/analyze-text")
+async def analyze_text(payload: TextAnswerRequest):
+    question_text = payload.question_text.strip()
+    answer_text = payload.answer_text.strip()
+
+    if not question_text:
+      raise HTTPException(status_code=400, detail="Question text is required.")
+    if not answer_text:
+      raise HTTPException(status_code=400, detail="Answer text is required.")
+
+    client = get_groq_client(None)
+    try:
+        evaluation = evaluate_answer(client, question_text, answer_text)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise map_groq_error(exc, "analyzing the typed answer") from exc
+
+    return {
+        "transcript": answer_text,
+        "word_timestamps": [],
+        "wpm": 0,
+        "pause_count": 0,
+        "filler_count": compute_filler_count(answer_text),
+        "silence_percent": 0,
+        "duration": 0,
         "score": round(float(evaluation.score), 1),
         "feedback": evaluation.feedback,
         "improved_answer": evaluation.improved_answer,
@@ -539,3 +630,19 @@ async def generate_questions_endpoint(
         raise map_groq_error(exc, "generating questions") from exc
 
     return questions.model_dump()
+
+
+@app.post("/evaluate-interview")
+async def evaluate_interview_endpoint(payload: InterviewEvaluationRequest):
+    if not payload.turns:
+        raise HTTPException(status_code=400, detail="At least one interview turn is required.")
+
+    client = get_groq_client(payload.api_key)
+    try:
+        evaluation = evaluate_interview(client, payload.turns)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise map_groq_error(exc, "evaluating the interview") from exc
+
+    return evaluation.model_dump()

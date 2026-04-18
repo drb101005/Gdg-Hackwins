@@ -177,6 +177,27 @@ export function reprocessInterviews() {
   });
 }
 
+export function reprocessInterviewAudio(interviewId) {
+  return request(`/admin/interviews/${interviewId}/reprocess-audio`, {
+    method: "POST",
+    timeoutMs: 120000,
+  });
+}
+
+export function reprocessInterviewScores(interviewId) {
+  return request(`/admin/interviews/${interviewId}/reprocess-scores`, {
+    method: "POST",
+    timeoutMs: 120000,
+  });
+}
+
+export function stopInterviewProcessing(interviewId) {
+  return request(`/admin/interviews/${interviewId}/stop-processing`, {
+    method: "POST",
+    timeoutMs: 120000,
+  });
+}
+
 export function runTestingTranscription(payload) {
   return request("/testing/transcription", {
     method: "POST",
@@ -190,5 +211,21 @@ export function runTestingQuestionGeneration(payload) {
     method: "POST",
     body: payload,
     timeoutMs: 60000,
+  });
+}
+
+export function runTestingStaticAnswer(payload) {
+  return request("/testing/static-answer", {
+    method: "POST",
+    body: payload,
+    timeoutMs: 120000,
+  });
+}
+
+export function runTestingStaticAnswerText(payload) {
+  return request("/testing/static-answer-text", {
+    method: "POST",
+    body: payload,
+    timeoutMs: 120000,
   });
 }

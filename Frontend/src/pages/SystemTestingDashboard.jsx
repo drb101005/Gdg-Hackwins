@@ -1,8 +1,10 @@
- import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AudioLines, Camera, FileText, LoaderCircle } from "lucide-react";
 import TestSectionCard from "../components/testing/TestSectionCard";
-import { runTestingQuestionGeneration, runTestingTranscription } from "../services/api";
+import { runTestingQuestionGeneration, runTestingStaticAnswer, runTestingStaticAnswerText, runTestingTranscription } from "../services/api";
 import { convertBlobToWav, selectRecordingMimeType } from "../utils/audio";
+
+const STATIC_TEST_QUESTION = "How to share a project made with open cv";
 
 function createStatus(status = "idle", message = "Ready for testing.") {
   return { status, message };
@@ -37,6 +39,9 @@ function SystemTestingDashboard() {
   const [questionStatus, setQuestionStatus] = useState(
     createStatus("idle", "Paste resume context and generate interview questions."),
   );
+  const [staticAnswerStatus, setStaticAnswerStatus] = useState(
+    createStatus("idle", "Record one answer for the fixed OpenCV question and send it to Groq."),
+  );
 
   const [isRecording, setIsRecording] = useState(false);
   const [audioPreviewUrl, setAudioPreviewUrl] = useState("");
@@ -60,6 +65,13 @@ function SystemTestingDashboard() {
     resume_based_questions: [],
     core_questions: [],
   });
+  const [staticAnswerResult, setStaticAnswerResult] = useState({
+    transcript: "",
+    score: null,
+    feedback: "",
+    improved_answer: "",
+  });
+  const [typedStaticAnswer, setTypedStaticAnswer] = useState("");
 
   const audioStreamRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -266,6 +278,57 @@ function SystemTestingDashboard() {
       setQuestionStatus(createStatus("success", "Question generation completed successfully."));
     } catch (error) {
       setQuestionStatus(createStatus("error", error.message || "Question generation failed."));
+    }
+  };
+
+  const handleStaticAnswerSubmit = async () => {
+    if (!recordedBlob) {
+      setStaticAnswerStatus(createStatus("error", "Record audio before submitting the static-answer Groq test."));
+      return;
+    }
+
+    setStaticAnswerStatus(createStatus("loading", "Transcribing and grading the fixed answer with Groq..."));
+
+    try {
+      const { blob: wavBlob } = await convertBlobToWav(recordedBlob);
+      const formData = new FormData();
+      formData.append("audio", new File([wavBlob], "static-question-answer.wav", { type: "audio/wav" }));
+      formData.append("duration", String(recordedDuration || 30));
+
+      const response = await runTestingStaticAnswer(formData);
+      setStaticAnswerResult({
+        transcript: response?.transcript || "",
+        score: Number.isFinite(Number(response?.score)) ? Number(response.score) : null,
+        feedback: response?.feedback || "",
+        improved_answer: response?.improved_answer || "",
+      });
+      setStaticAnswerStatus(createStatus("success", "Static question answer was graded successfully."));
+    } catch (error) {
+      setStaticAnswerStatus(createStatus("error", error.message || "Static question grading failed."));
+    }
+  };
+
+  const handleStaticTypedAnswerSubmit = async () => {
+    if (!typedStaticAnswer.trim()) {
+      setStaticAnswerStatus(createStatus("error", "Type an answer before submitting it to Groq."));
+      return;
+    }
+
+    setStaticAnswerStatus(createStatus("loading", "Grading your typed answer with Groq..."));
+
+    try {
+      const response = await runTestingStaticAnswerText({
+        answerText: typedStaticAnswer,
+      });
+      setStaticAnswerResult({
+        transcript: response?.transcript || "",
+        score: Number.isFinite(Number(response?.score)) ? Number(response.score) : null,
+        feedback: response?.feedback || "",
+        improved_answer: response?.improved_answer || "",
+      });
+      setStaticAnswerStatus(createStatus("success", "Typed answer was graded successfully."));
+    } catch (error) {
+      setStaticAnswerStatus(createStatus("error", error.message || "Typed answer grading failed."));
     }
   };
 
@@ -523,6 +586,63 @@ function SystemTestingDashboard() {
                     })
                   : <li>No core questions generated yet.</li>}
               </ul>
+            </div>
+          </div>
+        </TestSectionCard>
+
+        <TestSectionCard
+          title="4. Static Question -> Groq Grading Test"
+          description="Record one answer for a fixed OpenCV question, then verify that the transcript, score, feedback, and improved answer come back from Groq."
+          status={staticAnswerStatus}
+        >
+          <div className="insight-card-modern" style={{ marginBottom: "1rem" }}>
+            <p className="interview-label-modern">Fixed Question</p>
+            <p>{STATIC_TEST_QUESTION}</p>
+          </div>
+
+          <div className="testing-action-row">
+            <button className="btn-secondary-modern" onClick={handleStaticAnswerSubmit} disabled={staticAnswerStatus.status === "loading"}>
+              {staticAnswerStatus.status === "loading" ? <LoaderCircle size={18} className="testing-spin" /> : null}
+              <span>Submit Recorded Answer</span>
+            </button>
+          </div>
+
+          <label className="label-modern">
+            Type Your Answer
+            <textarea
+              className="textarea-modern"
+              value={typedStaticAnswer}
+              onChange={(event) => setTypedStaticAnswer(event.target.value)}
+              placeholder="Type your answer here and send it directly to Groq for scoring..."
+            />
+          </label>
+
+          <div className="testing-action-row">
+            <button className="btn-primary-modern" onClick={handleStaticTypedAnswerSubmit} disabled={staticAnswerStatus.status === "loading"}>
+              {staticAnswerStatus.status === "loading" ? <LoaderCircle size={18} className="testing-spin" /> : null}
+              <span>Submit Typed Answer</span>
+            </button>
+          </div>
+
+          <div className="testing-output-grid">
+            <div className="insight-card-modern">
+              <p className="interview-label-modern">Transcript</p>
+              <p>{staticAnswerResult.transcript || "Your graded-answer transcript will appear here."}</p>
+            </div>
+
+            <div className="insight-card-modern">
+              <p className="interview-label-modern">Score</p>
+              <p>{staticAnswerResult.score !== null ? `${staticAnswerResult.score}/10` : "Pending"}</p>
+            </div>
+
+            <div className="insight-card-modern">
+              <p className="interview-label-modern">Feedback</p>
+              <p>{staticAnswerResult.feedback || "Groq feedback will appear here after grading."}</p>
+            </div>
+
+            <div className="insight-card-modern">
+              <p className="interview-label-modern">Improved Answer</p>
+              <p>{staticAnswerResult.improved_answer || "A stronger rewritten answer will appear here after grading."}</p>
             </div>
           </div>
         </TestSectionCard>

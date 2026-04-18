@@ -24,6 +24,7 @@ export class TestingController {
   private readonly aiBaseUrl = String(process.env.AI_SERVICE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
   private readonly allowedTestEmail = (process.env.TEST_USER_EMAIL || "test@gmail.com").trim().toLowerCase();
   private readonly backendRoot = resolveBackendRoot();
+  private readonly staticQuestion = "How to share a project made with open cv";
 
   constructor(private readonly localSttService: LocalSttService) {}
 
@@ -93,6 +94,72 @@ export class TestingController {
     formData.append("focus_areas", focusAreas);
 
     return this.forwardToAIService("/generate-questions", formData);
+  }
+
+  @Post("static-answer")
+  @UseInterceptors(FileInterceptor("audio"))
+  async analyzeStaticAnswer(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { duration?: string | number },
+    @UploadedFile() audio?: Express.Multer.File,
+  ) {
+    this.assertTestingAccess(user);
+
+    if (!audio?.buffer?.length) {
+      throw new HttpException("Audio recording is required.", 400);
+    }
+
+    const formData = new FormData();
+    formData.append("question_text", this.staticQuestion);
+    formData.append("duration", String(body.duration ?? 30));
+    formData.append("file", new Blob([new Uint8Array(audio.buffer)], { type: "audio/wav" }), audio.originalname || "testing-answer.wav");
+
+    return this.forwardToAIService("/analyze", formData);
+  }
+
+  @Post("static-answer-text")
+  async analyzeStaticAnswerText(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { answerText?: string },
+  ) {
+    this.assertTestingAccess(user);
+
+    const answerText = String(body.answerText || "").trim();
+    if (!answerText) {
+      throw new HttpException("Typed answer is required.", 400);
+    }
+
+    try {
+      const response = await fetch(`${this.aiBaseUrl}/analyze-text`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          question_text: this.staticQuestion,
+          answer_text: answerText,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message =
+          (payload && typeof payload === "object" && "detail" in payload && String(payload.detail)) ||
+          `AI testing request failed with status ${response.status}.`;
+        throw new HttpException(message, response.status);
+      }
+
+      return payload;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      const rawMessage = error instanceof Error ? error.message : "Unknown AI testing error.";
+      throw new ServiceUnavailableException(
+        `AI testing service unavailable at ${this.aiBaseUrl}. Start the FastAPI service on /health and retry. ${rawMessage}`.trim(),
+      );
+    }
   }
 
   private assertTestingAccess(user: AuthUser) {

@@ -184,6 +184,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           resume_text LONGTEXT NULL,
           job_description LONGTEXT NULL,
           total_score DOUBLE NULL,
+          overall_feedback LONGTEXT NULL,
           current_question_index INT NOT NULL DEFAULT 0,
           completed TINYINT(1) NOT NULL DEFAULT 0,
           created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -251,6 +252,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     await this.ensureColumnExists("interviews", "company", "VARCHAR(255) NULL");
     await this.ensureColumnExists("interviews", "focus_areas", "TEXT NULL");
     await this.ensureColumnExists("interviews", "question_source", "VARCHAR(32) NULL");
+    await this.ensureColumnExists("interviews", "overall_feedback", "LONGTEXT NULL");
     await this.ensureColumnExists("users", "security_question", "VARCHAR(255) NULL");
     await this.ensureColumnExists("users", "security_answer_hash", "VARCHAR(255) NULL");
   }

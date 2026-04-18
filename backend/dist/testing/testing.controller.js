@@ -26,6 +26,7 @@ let TestingController = class TestingController {
     aiBaseUrl = String(process.env.AI_SERVICE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
     allowedTestEmail = (process.env.TEST_USER_EMAIL || "test@gmail.com").trim().toLowerCase();
     backendRoot = (0, system_checks_1.resolveBackendRoot)();
+    staticQuestion = "How to share a project made with open cv";
     constructor(localSttService) {
         this.localSttService = localSttService;
     }
@@ -68,6 +69,50 @@ let TestingController = class TestingController {
         formData.append("job_description", jobDescription);
         formData.append("focus_areas", focusAreas);
         return this.forwardToAIService("/generate-questions", formData);
+    }
+    async analyzeStaticAnswer(user, body, audio) {
+        this.assertTestingAccess(user);
+        if (!audio?.buffer?.length) {
+            throw new common_1.HttpException("Audio recording is required.", 400);
+        }
+        const formData = new FormData();
+        formData.append("question_text", this.staticQuestion);
+        formData.append("duration", String(body.duration ?? 30));
+        formData.append("file", new Blob([new Uint8Array(audio.buffer)], { type: "audio/wav" }), audio.originalname || "testing-answer.wav");
+        return this.forwardToAIService("/analyze", formData);
+    }
+    async analyzeStaticAnswerText(user, body) {
+        this.assertTestingAccess(user);
+        const answerText = String(body.answerText || "").trim();
+        if (!answerText) {
+            throw new common_1.HttpException("Typed answer is required.", 400);
+        }
+        try {
+            const response = await fetch(`${this.aiBaseUrl}/analyze-text`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    question_text: this.staticQuestion,
+                    answer_text: answerText,
+                }),
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok) {
+                const message = (payload && typeof payload === "object" && "detail" in payload && String(payload.detail)) ||
+                    `AI testing request failed with status ${response.status}.`;
+                throw new common_1.HttpException(message, response.status);
+            }
+            return payload;
+        }
+        catch (error) {
+            if (error instanceof common_1.HttpException) {
+                throw error;
+            }
+            const rawMessage = error instanceof Error ? error.message : "Unknown AI testing error.";
+            throw new common_1.ServiceUnavailableException(`AI testing service unavailable at ${this.aiBaseUrl}. Start the FastAPI service on /health and retry. ${rawMessage}`.trim());
+        }
     }
     assertTestingAccess(user) {
         const email = String(user.email || "").trim().toLowerCase();
@@ -130,6 +175,24 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], TestingController.prototype, "generateQuestions", null);
+__decorate([
+    (0, common_1.Post)("static-answer"),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)("audio")),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:returntype", Promise)
+], TestingController.prototype, "analyzeStaticAnswer", null);
+__decorate([
+    (0, common_1.Post)("static-answer-text"),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], TestingController.prototype, "analyzeStaticAnswerText", null);
 exports.TestingController = TestingController = __decorate([
     (0, common_1.Controller)("testing"),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

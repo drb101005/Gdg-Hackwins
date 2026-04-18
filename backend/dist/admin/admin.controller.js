@@ -34,6 +34,24 @@ let AdminController = class AdminController {
         }
         return this.interviewsService.reprocessAllStoredAnswers();
     }
+    async reprocessInterviewAudio(user, interviewId) {
+        if (user.role !== "admin") {
+            throw new common_1.ForbiddenException("Admin access required.");
+        }
+        return this.interviewsService.reprocessInterviewAudio(user, interviewId);
+    }
+    async reprocessInterviewScores(user, interviewId) {
+        if (user.role !== "admin") {
+            throw new common_1.ForbiddenException("Admin access required.");
+        }
+        return this.interviewsService.reprocessInterviewScores(user, interviewId);
+    }
+    async stopInterviewProcessing(user, interviewId) {
+        if (user.role !== "admin") {
+            throw new common_1.ForbiddenException("Admin access required.");
+        }
+        return this.interviewsService.stopInterviewProcessing(user, interviewId);
+    }
 };
 exports.AdminController = AdminController;
 __decorate([
@@ -50,6 +68,30 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AdminController.prototype, "reprocessInterviews", null);
+__decorate([
+    (0, common_1.Post)("interviews/:id/reprocess-audio"),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)("id")),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "reprocessInterviewAudio", null);
+__decorate([
+    (0, common_1.Post)("interviews/:id/reprocess-scores"),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)("id")),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "reprocessInterviewScores", null);
+__decorate([
+    (0, common_1.Post)("interviews/:id/stop-processing"),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Param)("id")),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], AdminController.prototype, "stopInterviewProcessing", null);
 exports.AdminController = AdminController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     (0, common_1.Controller)("admin"),

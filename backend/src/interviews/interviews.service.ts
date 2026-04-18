@@ -27,6 +27,7 @@ type InterviewRow = {
   resume_text: string | null;
   job_description: string | null;
   total_score: number | null;
+  overall_feedback?: string | null;
   current_question_index: number;
   completed: number;
   created_at: string;
@@ -37,6 +38,7 @@ type InterviewScoreRow = {
   completed: number;
   status: string;
   current_question_index: number;
+  overall_feedback?: string | null;
 };
 
 type QuestionRow = {
@@ -94,6 +96,23 @@ type AnswerAnalysis = {
   improved_answer: string;
 };
 
+type InterviewEvaluation = {
+  overall_score: number;
+  overall_feedback: string;
+};
+
+type ProcessingMode = "audio" | "score";
+
+type ProcessingTracker = {
+  mode: ProcessingMode;
+  totalQuestions: number;
+  completedQuestions: number;
+  currentQuestionIndex: number | null;
+  statusMessage: string;
+  cancelRequested: boolean;
+  abortController: AbortController;
+};
+
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 80 * 1024 * 1024;
 const ALLOWED_AUDIO_TYPES = new Set([
@@ -104,6 +123,7 @@ const ALLOWED_AUDIO_TYPES = new Set([
 export class InterviewsService {
   private readonly logger = new Logger(InterviewsService.name);
   private readonly aiBaseUrl = String(process.env.AI_SERVICE_URL || "http://127.0.0.1:8000").replace(/\/+$/, "");
+  private readonly processingJobs = new Map<string, ProcessingTracker>();
 
   constructor(
     private readonly databaseService: DatabaseService,
@@ -146,7 +166,6 @@ export class InterviewsService {
       resumeText,
       jobDescription,
       focusAreas,
-      apiKey: latestUser.api_key || null,
     });
     const questions = generated.questions;
 
@@ -154,8 +173,8 @@ export class InterviewsService {
       await tx.execute(
         `
           INSERT INTO interviews
-            (id, user_id, status, type, difficulty, role_name, company, focus_areas, question_source, resume_text, job_description, total_score, current_question_index, completed)
-          VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, 0)
+            (id, user_id, status, type, difficulty, role_name, company, focus_areas, question_source, resume_text, job_description, total_score, overall_feedback, current_question_index, completed)
+          VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, 0)
         `,
         [
           interviewId,
@@ -392,30 +411,73 @@ export class InterviewsService {
       throw new ForbiddenException("You do not have access to this interview.");
     }
 
-    await this.databaseService.execute(
-      "UPDATE interviews SET status = 'processing' WHERE id = ?",
-      [interviewId],
-    );
+    await this.startInterviewProcessing(interviewId, "audio");
 
-    const interviewOwner = await this.getUser(interview.user_id);
-    const questions = await this.getQuestions(interviewId);
-    for (const question of questions) {
-      const answer = await this.databaseService.queryOne<AnswerRow>(
-        "SELECT * FROM answers WHERE question_id = ? LIMIT 1",
-        [question.id],
-      );
+    return {
+      interview: await this.getInterviewForUser(interviewId, user),
+    };
+  }
 
-      if (!answer) {
-        continue;
-      }
-
-      await this.analyzeAndPersistAnswer(question, answer, interviewOwner?.api_key || null);
+  async reprocessInterviewAudio(user: AuthUser, interviewId: string) {
+    const interview = await this.findInterview(interviewId);
+    if (!interview) {
+      throw new NotFoundException("Interview not found.");
     }
-    await this.refreshInterviewScore(interviewId, {
-      status: "completed",
-      completed: true,
-      currentQuestionIndex: questions.length,
-    });
+
+    if (user.role !== "admin") {
+      throw new ForbiddenException("Admin access required.");
+    }
+
+    await this.startInterviewProcessing(interviewId, "audio");
+    return {
+      interview: await this.getInterviewForUser(interviewId, user),
+    };
+  }
+
+  async reprocessInterviewScores(user: AuthUser, interviewId: string) {
+    const interview = await this.findInterview(interviewId);
+    if (!interview) {
+      throw new NotFoundException("Interview not found.");
+    }
+
+    if (user.role !== "admin") {
+      throw new ForbiddenException("Admin access required.");
+    }
+
+    await this.startInterviewProcessing(interviewId, "score");
+    return {
+      interview: await this.getInterviewForUser(interviewId, user),
+    };
+  }
+
+  async stopInterviewProcessing(user: AuthUser, interviewId: string) {
+    const interview = await this.findInterview(interviewId);
+    if (!interview) {
+      throw new NotFoundException("Interview not found.");
+    }
+
+    if (user.role !== "admin") {
+      throw new ForbiddenException("Admin access required.");
+    }
+
+    const tracker = this.processingJobs.get(interviewId);
+    if (tracker) {
+      tracker.cancelRequested = true;
+      tracker.statusMessage = "Stopping processing...";
+      tracker.abortController.abort();
+    }
+
+    await this.databaseService.execute(
+      `
+        UPDATE interviews
+        SET status = 'failed',
+            completed = 0,
+            total_score = NULL,
+            overall_feedback = ?
+        WHERE id = ?
+      `,
+      ["Processing was stopped by the admin.", interviewId],
+    );
 
     return {
       interview: await this.getInterviewForUser(interviewId, user),
@@ -432,7 +494,6 @@ export class InterviewsService {
           question_text: string;
           audio_path: string;
           duration: number | null;
-          api_key: string | null;
         }
       >[number]
     >(
@@ -443,12 +504,10 @@ export class InterviewsService {
           q.id AS question_id,
           q.question_text,
           a.audio_path,
-          a.duration,
-          u.api_key
+          a.duration
         FROM answers a
         JOIN questions q ON q.id = a.question_id
         JOIN interviews i ON i.id = q.interview_id
-        JOIN users u ON u.id = i.user_id
         WHERE a.audio_path IS NOT NULL AND a.audio_path <> ''
         ORDER BY i.created_at ASC, q.order_index ASC
       `,
@@ -482,12 +541,13 @@ export class InterviewsService {
         order_index: 0,
       };
 
-      await this.analyzeAndPersistAnswer(question, answer, row.api_key || null);
+      await this.analyzeAndPersistAnswer(question, answer, null);
       interviewIds.add(row.interview_id);
       processed += 1;
     }
 
     for (const interviewId of interviewIds) {
+      await this.evaluateInterviewAndPersist(interviewId, null);
       await this.refreshInterviewScore(interviewId);
     }
 
@@ -543,10 +603,30 @@ export class InterviewsService {
       [interview.id],
     );
 
+    const audioDone = answers.filter((answer) => String(answer.transcript || "").trim()).length;
+    const scoreDone = answers.filter((answer) => answer.score !== null && answer.score !== undefined).length;
+    const totalQuestions = questions.length;
+    const overallPercent =
+      totalQuestions > 0 ? Math.round(((audioDone + scoreDone) / (totalQuestions * 2)) * 100) : 0;
+    const tracker = this.processingJobs.get(interview.id);
+
     return {
       ...this.serializeInterview(interview),
       questions: questions.map((question) => this.serializeQuestion(question)),
       answers: answers.map((answer) => this.serializeAnswer(answer)),
+      processing: {
+        total_questions: totalQuestions,
+        audio_done: audioDone,
+        score_done: scoreDone,
+        overall_percent: overallPercent,
+        mode: tracker?.mode || null,
+        current_question_index: tracker?.currentQuestionIndex ?? null,
+        completed_questions: tracker?.completedQuestions ?? 0,
+        status_message:
+          tracker?.statusMessage ||
+          (interview.status === "processing" ? "Processing interview answers..." : ""),
+        cancel_requested: tracker?.cancelRequested || false,
+      },
     };
   }
 
@@ -564,6 +644,7 @@ export class InterviewsService {
       resume_text: interview.resume_text || "",
       job_description: interview.job_description || "",
       total_score: interview.total_score ?? null,
+      overall_feedback: interview.overall_feedback || "",
       current_question_index: Number(interview.current_question_index || 0),
       completed: Boolean(interview.completed),
       created_at: interview.created_at,
@@ -708,6 +789,7 @@ export class InterviewsService {
           resumeText,
           jobDescription,
           focusAreas,
+          apiKey: apiKey || null,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -806,6 +888,7 @@ export class InterviewsService {
     resumeText,
     jobDescription,
     focusAreas,
+    apiKey,
   }: {
     role: string;
     experienceLevel: string;
@@ -814,6 +897,7 @@ export class InterviewsService {
     resumeText: string;
     jobDescription: string;
     focusAreas: string;
+    apiKey?: string | null;
   }): Promise<QuestionGenerationResult> {
     const formData = new FormData();
     formData.append("role", role);
@@ -823,6 +907,9 @@ export class InterviewsService {
     formData.append("resume_data", resumeText);
     formData.append("job_description", jobDescription);
     formData.append("focus_areas", focusAreas);
+    if (apiKey?.trim()) {
+      formData.append("api_key", apiKey.trim());
+    }
 
     const response = await this.fetchAIService("/generate-questions", {
       method: "POST",
@@ -909,16 +996,16 @@ export class InterviewsService {
     relativeAudioPath: string,
     duration: number,
     apiKey?: string | null,
+    signal?: AbortSignal,
   ): Promise<AnswerAnalysis> {
     const absoluteAudioPath = join(this.databaseService.baseDir, relativeAudioPath);
-    const fallback = this.buildMockAnalysis(questionText, basename(relativeAudioPath), duration || 30);
 
     if (!relativeAudioPath.toLowerCase().endsWith(".wav")) {
       return this.buildSilentAnalysis(duration || 30);
     }
 
     if (!existsSync(absoluteAudioPath)) {
-      return fallback;
+      throw new ServiceUnavailableException(`Answer audio file is missing for ${basename(relativeAudioPath)}.`);
     }
 
     try {
@@ -937,33 +1024,28 @@ export class InterviewsService {
           basename(relativeAudioPath),
           duration || 30,
           apiKey || null,
+          signal,
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn(`AI answer analysis failed for ${relativeAudioPath}. Falling back to local scoring. ${message}`);
-      }
+        if (!this.shouldFallbackFromAiAudioAnalysis(message)) {
+          throw error;
+        }
 
-      this.logger.log(`Running local STT fallback for ${relativeAudioPath}`);
-      const transcription = await this.localSttService.transcribeAudioFile(absoluteAudioPath);
-      if (!transcription.transcript.trim() || transcription.word_timestamps.length === 0) {
-        return this.buildSilentAnalysis(duration || 30);
+        this.logger.warn(
+          `AI audio analysis timed out for ${relativeAudioPath}. Falling back to backend STT plus transcript scoring.`,
+        );
+        return this.analyzeWithBackendSttFallback(
+          questionText,
+          absoluteAudioPath,
+          duration || 30,
+          signal,
+        );
       }
-
-      const metrics = this.computeMetrics(transcription.word_timestamps, transcription.transcript, duration || 30);
-      return this.scoreAnalysis(
-        questionText,
-        transcription.transcript,
-        transcription.word_timestamps,
-        metrics.wpm,
-        metrics.pause_count,
-        metrics.filler_count,
-        metrics.silence_percent,
-        metrics.duration,
-      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`Local STT failed for ${relativeAudioPath}. Returning mock fallback. ${message}`);
-      return fallback;
+      this.logger.error(`AI-backed answer analysis failed for ${relativeAudioPath}. ${message}`);
+      throw new ServiceUnavailableException(`AI answer analysis failed for ${basename(relativeAudioPath)}. ${message}`);
     }
   }
 
@@ -973,6 +1055,7 @@ export class InterviewsService {
     fileName: string,
     duration: number,
     apiKey?: string | null,
+    signal?: AbortSignal,
   ): Promise<AnswerAnalysis> {
     const formData = new FormData();
     const audioArray = new Uint8Array(audioBytes);
@@ -986,6 +1069,7 @@ export class InterviewsService {
     const payload = await this.fetchAIService("/analyze", {
       method: "POST",
       body: formData,
+      signal,
     });
 
     return {
@@ -1000,11 +1084,6 @@ export class InterviewsService {
       feedback: String(payload?.feedback || ""),
       improved_answer: String(payload?.improved_answer || ""),
     };
-  }
-
-  private buildMockAnalysis(questionText: string, fileName: string, duration: number): AnswerAnalysis {
-    const transcript = `Mock transcript for ${fileName}. The candidate gave a focused answer about ${questionText.toLowerCase()}.`;
-    return this.scoreAnalysis(questionText, transcript, [], 118, 2, 1, 22, duration || 30);
   }
 
   private buildSilentAnalysis(duration: number): AnswerAnalysis {
@@ -1023,32 +1102,34 @@ export class InterviewsService {
     };
   }
 
-  private scoreAnalysis(
+  private async analyzeWithBackendSttFallback(
     questionText: string,
-    transcript: string,
-    wordTimestamps: WordTimestamp[],
-    wpm: number,
-    pauseCount: number,
-    fillerCount: number,
-    silencePercent: number,
+    absoluteAudioPath: string,
     duration: number,
-  ): AnswerAnalysis {
-    const transcriptLengthScore = Math.min(2, transcript.split(/\s+/).filter(Boolean).length / 45);
-    const fluencyPenalty = pauseCount * 0.2 + fillerCount * 0.25 + Math.max(0, Math.abs(125 - wpm) / 70);
-    const score = Math.max(5.5, Math.min(9.6, Number((8 + transcriptLengthScore - fluencyPenalty).toFixed(1))));
+    signal?: AbortSignal,
+  ): Promise<AnswerAnalysis> {
+    const transcription = await this.localSttService.transcribeAudioFile(absoluteAudioPath);
+    const transcript = String(transcription.transcript || "").trim();
+    const wordTimestamps = Array.isArray(transcription.word_timestamps) ? transcription.word_timestamps : [];
+
+    if (!transcript) {
+      return this.buildSilentAnalysis(duration);
+    }
+
+    const metrics = this.computeMetrics(wordTimestamps, transcript, duration);
+    const evaluation = await this.scoreTranscriptWithAIService(questionText, transcript, signal);
 
     return {
       transcript,
       word_timestamps: wordTimestamps,
-      wpm,
-      pause_count: pauseCount,
-      filler_count: fillerCount,
-      silence_percent: silencePercent,
-      duration,
-      score,
-      feedback: `Strong effort on "${questionText}". Tighten the structure a bit and keep examples specific to raise the score further.`,
-      improved_answer:
-        "Lead with the situation, explain the action you took, and close with a measurable outcome so the answer feels clearer and more persuasive.",
+      wpm: metrics.wpm,
+      pause_count: metrics.pause_count,
+      filler_count: metrics.filler_count,
+      silence_percent: metrics.silence_percent,
+      duration: metrics.duration,
+      score: evaluation.score,
+      feedback: evaluation.feedback,
+      improved_answer: evaluation.improved_answer,
     };
   }
 
@@ -1056,12 +1137,14 @@ export class InterviewsService {
     question: Pick<QuestionRow, "id" | "question_text">,
     answer: Pick<AnswerRow, "audio_path" | "duration">,
     apiKey?: string | null,
+    signal?: AbortSignal,
   ) {
     const analysis = await this.processAnswer(
       question.question_text,
       answer.audio_path,
       Number(answer.duration || 30),
       apiKey || null,
+      signal,
     );
 
     await this.databaseService.execute(
@@ -1085,6 +1168,273 @@ export class InterviewsService {
         question.id,
       ],
     );
+  }
+
+  private async scoreTranscriptAndPersist(
+    question: Pick<QuestionRow, "id" | "question_text">,
+    transcript: string,
+    signal?: AbortSignal,
+  ) {
+    const analysis = await this.scoreTranscriptWithAIService(question.question_text, transcript, signal);
+    await this.databaseService.execute(
+      `
+        UPDATE answers
+        SET score = ?, feedback = ?, improved_answer = ?
+        WHERE question_id = ?
+      `,
+      [
+        analysis.score,
+        analysis.feedback,
+        analysis.improved_answer,
+        question.id,
+      ],
+    );
+  }
+
+  private async evaluateInterviewAndPersist(interviewId: string, apiKey?: string | null, signal?: AbortSignal) {
+    const turns = await this.databaseService.query<
+      Array<{ question_text: string; transcript: string | null }>[number]
+    >(
+      `
+        SELECT q.question_text, a.transcript
+        FROM questions q
+        JOIN answers a ON a.question_id = q.id
+        WHERE q.interview_id = ?
+        ORDER BY q.order_index ASC
+      `,
+      [interviewId],
+    );
+
+    const payload = turns
+      .map((entry) => ({
+        question: String(entry.question_text || "").trim(),
+        answer: String(entry.transcript || "").trim(),
+      }))
+      .filter((entry) => entry.question && entry.answer);
+
+    if (!payload.length) {
+      throw new ServiceUnavailableException("No processed interview answers were available for final evaluation.");
+    }
+
+    const evaluation = await this.evaluateInterviewWithAIService(payload, apiKey || null, signal);
+    await this.databaseService.execute(
+      `
+        UPDATE interviews
+        SET total_score = ?, overall_feedback = ?
+        WHERE id = ?
+      `,
+      [evaluation.overall_score, evaluation.overall_feedback, interviewId],
+    );
+  }
+
+  private async startInterviewProcessing(interviewId: string, mode: ProcessingMode) {
+    if (this.processingJobs.has(interviewId)) {
+      throw new BadRequestException("This interview is already processing.");
+    }
+
+    const questions = await this.getQuestions(interviewId);
+    this.processingJobs.set(interviewId, {
+      mode,
+      totalQuestions: questions.length,
+      completedQuestions: 0,
+      currentQuestionIndex: null,
+      statusMessage: mode === "audio" ? "Preparing audio reprocessing..." : "Preparing transcript rescoring...",
+      cancelRequested: false,
+      abortController: new AbortController(),
+    });
+
+    try {
+      await this.prepareInterviewForProcessing(interviewId, mode);
+      this.updateProcessingTracker(interviewId, {
+        statusMessage: mode === "audio" ? "Audio reprocessing started." : "Transcript rescoring started.",
+      });
+      void this.runInterviewProcessingJob(interviewId, mode);
+    } catch (error) {
+      this.processingJobs.delete(interviewId);
+      throw error;
+    }
+  }
+
+  private async prepareInterviewForProcessing(interviewId: string, mode: ProcessingMode) {
+    if (mode === "audio") {
+      await this.databaseService.execute(
+        `
+          UPDATE answers a
+          JOIN questions q ON q.id = a.question_id
+          SET a.transcript = NULL,
+              a.word_timestamps_json = NULL,
+              a.wpm = NULL,
+              a.pause_count = NULL,
+              a.filler_count = NULL,
+              a.silence_percent = NULL,
+              a.score = NULL,
+              a.feedback = NULL,
+              a.improved_answer = NULL
+          WHERE q.interview_id = ?
+        `,
+        [interviewId],
+      );
+    } else {
+      await this.databaseService.execute(
+        `
+          UPDATE answers a
+          JOIN questions q ON q.id = a.question_id
+          SET a.score = NULL,
+              a.feedback = NULL,
+              a.improved_answer = NULL
+          WHERE q.interview_id = ?
+        `,
+        [interviewId],
+      );
+    }
+
+    await this.databaseService.execute(
+      `
+        UPDATE interviews
+        SET status = 'processing',
+            completed = 0,
+            total_score = NULL,
+            overall_feedback = NULL
+        WHERE id = ?
+      `,
+      [interviewId],
+    );
+  }
+
+  private async runInterviewProcessingJob(interviewId: string, mode: ProcessingMode) {
+    try {
+      const questions = await this.getQuestions(interviewId);
+      const signal = this.getProcessingSignal(interviewId);
+      this.updateProcessingTracker(interviewId, {
+        totalQuestions: questions.length,
+        statusMessage: mode === "audio" ? "Reprocessing interview audio..." : "Re-scoring interview transcripts...",
+      });
+
+      for (const [index, question] of questions.entries()) {
+        this.throwIfProcessingCancelled(interviewId);
+        this.updateProcessingTracker(interviewId, {
+          currentQuestionIndex: index + 1,
+          statusMessage:
+            mode === "audio"
+              ? `Reprocessing audio for question ${index + 1} of ${questions.length}...`
+              : `Re-scoring question ${index + 1} of ${questions.length}...`,
+        });
+        const answer = await this.databaseService.queryOne<AnswerRow>(
+          "SELECT * FROM answers WHERE question_id = ? LIMIT 1",
+          [question.id],
+        );
+        if (!answer) {
+          this.updateProcessingTracker(interviewId, {
+            completedQuestions: index + 1,
+          });
+          continue;
+        }
+
+        if (mode === "audio") {
+          await this.analyzeAndPersistAnswer(question, answer, null, signal);
+        } else {
+          const transcript = String(answer.transcript || "").trim();
+          if (!transcript) {
+            this.updateProcessingTracker(interviewId, {
+              completedQuestions: index + 1,
+            });
+            continue;
+          }
+          await this.scoreTranscriptAndPersist(question, transcript, signal);
+        }
+
+        this.updateProcessingTracker(interviewId, {
+          completedQuestions: index + 1,
+        });
+      }
+
+      this.throwIfProcessingCancelled(interviewId);
+      this.updateProcessingTracker(interviewId, {
+        currentQuestionIndex: null,
+        completedQuestions: questions.length,
+        statusMessage: "Finalizing interview results...",
+      });
+      await this.evaluateInterviewAndPersist(interviewId, null, signal);
+      await this.refreshInterviewScore(interviewId, {
+        status: "completed",
+        completed: true,
+        currentQuestionIndex: questions.length,
+      });
+    } catch (error) {
+      if (this.isProcessingCancelled(error, interviewId)) {
+        this.logger.warn(`Interview processing cancelled for ${interviewId}.`);
+        await this.databaseService.execute(
+          `
+            UPDATE interviews
+            SET status = 'failed',
+                completed = 0,
+                total_score = NULL,
+                overall_feedback = ?
+            WHERE id = ?
+          `,
+          ["Processing was stopped by the admin.", interviewId],
+        );
+      } else {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Interview processing failed for ${interviewId}. ${message}`);
+        await this.databaseService.execute(
+          `
+            UPDATE interviews
+            SET status = 'failed',
+                completed = 0,
+                overall_feedback = ?
+            WHERE id = ?
+          `,
+          [message, interviewId],
+        );
+      }
+    } finally {
+      this.processingJobs.delete(interviewId);
+    }
+  }
+
+  private async evaluateInterviewWithAIService(
+    turns: Array<{ question: string; answer: string }>,
+    apiKey?: string | null,
+    signal?: AbortSignal,
+  ): Promise<InterviewEvaluation> {
+    const payload = {
+      turns,
+      api_key: apiKey?.trim() || undefined,
+    };
+    const response = await this.fetchAIService("/evaluate-interview", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal,
+    });
+
+    return {
+      overall_score: Number(response?.overall_score || 0),
+      overall_feedback: String(response?.overall_feedback || ""),
+    };
+  }
+
+  private async scoreTranscriptWithAIService(questionText: string, transcript: string, signal?: AbortSignal) {
+    const response = await this.fetchAIService("/analyze-text", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        question_text: questionText,
+        answer_text: transcript,
+      }),
+      signal,
+    });
+
+    return {
+      score: Number(response?.score || 0),
+      feedback: String(response?.feedback || ""),
+      improved_answer: String(response?.improved_answer || ""),
+    };
   }
 
   private async refreshInterviewScore(
@@ -1113,7 +1463,7 @@ export class InterviewsService {
       [interviewId],
     );
 
-    const totalScore =
+    const averageAnswerScore =
       scoredAnswers.length > 0
         ? scoredAnswers.reduce((sum, entry) => sum + Number(entry.score || 0), 0) / scoredAnswers.length
         : 0;
@@ -1121,13 +1471,13 @@ export class InterviewsService {
     await this.databaseService.execute(
       `
         UPDATE interviews
-        SET status = ?, completed = ?, total_score = ?, current_question_index = ?
+        SET status = ?, completed = ?, total_score = COALESCE(total_score, ?), current_question_index = ?
         WHERE id = ?
       `,
       [
         overrides?.status || interview?.status || "active",
         overrides?.completed !== undefined ? Number(overrides.completed) : Number(interview?.completed || 0),
-        totalScore,
+        averageAnswerScore,
         overrides?.currentQuestionIndex ??
           Number((interview?.current_question_index ?? questionCountRow?.count) || 0),
         interviewId,
@@ -1148,6 +1498,44 @@ export class InterviewsService {
     }
 
     return payload;
+  }
+
+  private updateProcessingTracker(interviewId: string, updates: Partial<ProcessingTracker>) {
+    const tracker = this.processingJobs.get(interviewId);
+    if (!tracker) {
+      return;
+    }
+
+    Object.assign(tracker, updates);
+  }
+
+  private getProcessingSignal(interviewId: string) {
+    return this.processingJobs.get(interviewId)?.abortController.signal;
+  }
+
+  private throwIfProcessingCancelled(interviewId: string) {
+    const tracker = this.processingJobs.get(interviewId);
+    if (!tracker?.cancelRequested) {
+      return;
+    }
+
+    const error = new Error("Processing cancelled.");
+    error.name = "ProcessingCancelledError";
+    throw error;
+  }
+
+  private isProcessingCancelled(error: unknown, interviewId: string) {
+    const tracker = this.processingJobs.get(interviewId);
+    if (tracker?.cancelRequested) {
+      return true;
+    }
+
+    return error instanceof Error && (error.name === "AbortError" || error.name === "ProcessingCancelledError");
+  }
+
+  private shouldFallbackFromAiAudioAnalysis(message: string) {
+    const normalized = String(message || "").toLowerCase();
+    return normalized.includes("local faster-whisper transcription timed out");
   }
 
   private computeMetrics(words: WordTimestamp[], transcript: string, duration: number) {

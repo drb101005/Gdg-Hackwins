@@ -3,7 +3,13 @@ import { useLocation, useParams } from "react-router-dom";
 import SummaryMetricsChart from "../components/SummaryMetricsChart";
 import WavAudioPlayer from "../components/WavAudioPlayer";
 import VideoPlayer from "../components/VideoPlayer";
-import { getInterview } from "../services/api";
+import {
+  getInterview,
+  reprocessInterviewAudio,
+  reprocessInterviewScores,
+  stopInterviewProcessing,
+} from "../services/api";
+import { useAuth } from "../hooks/useAuth";
 
 const ACTIVE_INTERVIEW_STORAGE_KEY = "ace_active_interview_id";
 
@@ -12,6 +18,16 @@ function Summary() {
   const location = useLocation();
   const [interview, setInterview] = useState(location.state?.interview || null);
   const [error, setError] = useState("");
+  const [actionStatus, setActionStatus] = useState("");
+  const [reprocessingAction, setReprocessingAction] = useState("");
+  const [stoppingProcessing, setStoppingProcessing] = useState(false);
+  const { user } = useAuth();
+
+  const loadInterview = async () => {
+    const response = await getInterview(interviewId);
+    setInterview(response.interview);
+    return response.interview;
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -24,10 +40,21 @@ function Summary() {
       return;
     }
 
-    getInterview(interviewId)
-      .then((response) => setInterview(response.interview))
+    loadInterview()
       .catch((err) => setError(err.message || "Unable to load summary."));
   }, [interview, interviewId]);
+
+  useEffect(() => {
+    if (!interview || interview.status !== "processing") {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      loadInterview().catch(() => undefined);
+    }, 2000);
+
+    return () => window.clearInterval(timer);
+  }, [interview?.id, interview?.status]);
 
   const answersByQuestionId = useMemo(
     () => new Map((interview?.answers || []).map((answer) => [answer.question_id, answer])),
@@ -48,6 +75,76 @@ function Summary() {
       }),
     [answersByQuestionId, interview?.questions],
   );
+
+  const processing = interview?.processing || {
+    total_questions: interview?.questions?.length || 0,
+    audio_done: 0,
+    score_done: 0,
+    overall_percent: 0,
+    mode: null,
+    current_question_index: null,
+    completed_questions: 0,
+    status_message: "",
+    cancel_requested: false,
+  };
+  const interviewStatus = interview?.status || "";
+  const interviewQuestions = interview?.questions || [];
+  const isProcessing = interviewStatus === "processing";
+  const hasQuestions = processing.total_questions > 0;
+  const isAudioPhaseProcessing =
+    isProcessing && hasQuestions && processing.audio_done < processing.total_questions;
+  const isScorePhaseProcessing =
+    isProcessing &&
+    hasQuestions &&
+    processing.audio_done >= processing.total_questions &&
+    processing.score_done < processing.total_questions;
+  const isSubmittingReprocess = Boolean(reprocessingAction);
+  const canStopProcessing = user?.role === "admin" && isProcessing && !processing.cancel_requested;
+
+  const handleReprocessAudio = async () => {
+    setReprocessingAction("audio");
+    setActionStatus("");
+    setError("");
+    try {
+      const response = await reprocessInterviewAudio(interviewId);
+      setInterview(response.interview);
+      setActionStatus("Audio reprocessing started.");
+    } catch (err) {
+      setError(err.message || "Unable to reprocess interview audio.");
+    } finally {
+      setReprocessingAction("");
+    }
+  };
+
+  const handleReprocessScores = async () => {
+    setReprocessingAction("score");
+    setActionStatus("");
+    setError("");
+    try {
+      const response = await reprocessInterviewScores(interviewId);
+      setInterview(response.interview);
+      setActionStatus("Transcript scoring started.");
+    } catch (err) {
+      setError(err.message || "Unable to reprocess interview scores.");
+    } finally {
+      setReprocessingAction("");
+    }
+  };
+
+  const handleStopProcessing = async () => {
+    setStoppingProcessing(true);
+    setActionStatus("");
+    setError("");
+    try {
+      const response = await stopInterviewProcessing(interviewId);
+      setInterview(response.interview);
+      setActionStatus("Stop requested. The current interview processing run is being cancelled.");
+    } catch (err) {
+      setError(err.message || "Unable to stop interview processing.");
+    } finally {
+      setStoppingProcessing(false);
+    }
+  };
 
   if (!interview) {
     return (
@@ -73,6 +170,36 @@ function Summary() {
         </div>
       </div>
 
+      {user?.role === "admin" ? (
+        <div className="testing-action-row" style={{ marginBottom: "1rem" }}>
+          <button
+            className="btn-primary-modern"
+            onClick={handleReprocessAudio}
+            disabled={isSubmittingReprocess || stoppingProcessing || isAudioPhaseProcessing}
+          >
+            {reprocessingAction === "audio" || isAudioPhaseProcessing ? "Reprocessing Audio..." : "Reprocess All Audio"}
+          </button>
+          <button
+            className="btn-secondary-modern"
+            onClick={handleReprocessScores}
+            disabled={isSubmittingReprocess || stoppingProcessing || isAudioPhaseProcessing || isScorePhaseProcessing}
+          >
+            {reprocessingAction === "score" || isScorePhaseProcessing ? "Re-scoring..." : "Re-score From Transcripts"}
+          </button>
+          {isProcessing ? (
+            <button
+              className="btn-secondary-modern"
+              onClick={handleStopProcessing}
+              disabled={!canStopProcessing || stoppingProcessing}
+            >
+              {stoppingProcessing || processing.cancel_requested ? "Stopping..." : "Stop Processing"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {actionStatus ? <div className="hint-modern">{actionStatus}</div> : null}
+
       <div className="stats-grid-modern">
         <div className="stat-card-modern">
           <h4>Status</h4>
@@ -84,7 +211,7 @@ function Summary() {
         </div>
         <div className="stat-card-modern">
           <h4>Questions</h4>
-          <div className="stat-value-modern">{interview.questions.length}</div>
+          <div className="stat-value-modern">{interviewQuestions.length}</div>
         </div>
         <div className="stat-card-modern">
           <h4>Completed</h4>
@@ -92,10 +219,40 @@ function Summary() {
         </div>
       </div>
 
+      {interviewStatus === "processing" ? (
+        <div className="card-modern">
+          <h3>Processing Progress</h3>
+          <p className="hint-modern">
+            {processing.status_message || "Processing interview answers..."}
+          </p>
+          {processing.current_question_index ? (
+            <p className="hint-modern">
+              Current question: {processing.current_question_index}/{processing.total_questions}
+            </p>
+          ) : null}
+          <p className="hint-modern">
+            Audio done: {processing.audio_done}/{processing.total_questions} | Scores done: {processing.score_done}/{processing.total_questions}
+          </p>
+          <div className="progress-wrapper-modern" style={{ marginTop: "0.75rem" }}>
+            <div className="progress-bar-modern" style={{ width: `${processing.overall_percent || 0}%` }} />
+          </div>
+          <p className="hint-modern" style={{ marginTop: "0.75rem" }}>
+            Overall progress: {processing.overall_percent || 0}%
+          </p>
+        </div>
+      ) : null}
+
+      {interview.overall_feedback ? (
+        <div className="card-modern">
+          <h3>Overall Interview Feedback</h3>
+          <p>{interview.overall_feedback}</p>
+        </div>
+      ) : null}
+
       <SummaryMetricsChart points={metricPoints} />
 
       <div className="sessions-modern">
-        {interview.questions.map((question, index) => {
+        {interviewQuestions.map((question, index) => {
           const answer = answersByQuestionId.get(question.id);
           const hasPendingResult = !answer?.transcript && !answer?.feedback;
 
