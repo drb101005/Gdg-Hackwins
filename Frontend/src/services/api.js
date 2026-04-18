@@ -104,8 +104,8 @@ export function requestPasswordReset(payload) {
   });
 }
 
-export function resetPassword(payload) {
-  return request("/auth/reset-password", {
+export function loginWithSecurityAnswer(payload) {
+  return request("/auth/forgot-password/login", {
     auth: false,
     method: "POST",
     body: payload,

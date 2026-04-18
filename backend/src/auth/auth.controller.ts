@@ -9,7 +9,16 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post("signup")
-  async signup(@Body() body: { email: string; password: string; name?: string }) {
+  async signup(
+    @Body()
+    body: {
+      email: string;
+      password: string;
+      name?: string;
+      securityQuestion: string;
+      securityAnswer: string;
+    },
+  ) {
     return this.authService.signup(body);
   }
 
@@ -19,13 +28,13 @@ export class AuthController {
   }
 
   @Post("forgot-password")
-  async requestPasswordReset(@Body() body: { email: string }) {
-    return this.authService.requestPasswordReset(body);
+  async getSecurityQuestion(@Body() body: { email: string }) {
+    return this.authService.getSecurityQuestion(body);
   }
 
-  @Post("reset-password")
-  async resetPassword(@Body() body: { token: string; password: string }) {
-    return this.authService.resetPassword(body);
+  @Post("forgot-password/login")
+  async loginWithSecurityAnswer(@Body() body: { email: string; securityAnswer: string }) {
+    return this.authService.loginWithSecurityAnswer(body);
   }
 
   @UseGuards(JwtAuthGuard)

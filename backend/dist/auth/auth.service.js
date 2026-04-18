@@ -18,10 +18,15 @@ const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const node_crypto_1 = require("node:crypto");
 const database_service_1 = require("../database/database.service");
+const ALLOWED_SECURITY_QUESTIONS = [
+    "What is your favorite color?",
+    "What is your favorite fruit?",
+    "What is your favorite animal?",
+    "What city were you born in?",
+];
 let AuthService = class AuthService {
     databaseService;
     jwtSecret = process.env.JWT_SECRET || "local-jwt-secret";
-    frontendBaseUrl = (process.env.FRONTEND_BASE_URL || "http://127.0.0.1:5173").trim();
     constructor(databaseService) {
         this.databaseService = databaseService;
     }
@@ -29,20 +34,39 @@ let AuthService = class AuthService {
         const email = payload.email.trim().toLowerCase();
         const password = payload.password.trim();
         const name = payload.name?.trim() || null;
-        if (!email || !password) {
-            throw new common_1.BadRequestException("Email and password are required.");
+        const securityQuestion = String(payload.securityQuestion || "").trim();
+        const securityAnswer = String(payload.securityAnswer || "").trim().toLowerCase();
+        if (!email || !password || !securityQuestion || !securityAnswer) {
+            throw new common_1.BadRequestException("Email, password, security question, and security answer are required.");
+        }
+        if (!ALLOWED_SECURITY_QUESTIONS.includes(securityQuestion)) {
+            throw new common_1.BadRequestException("Please choose one of the available security questions.");
+        }
+        if (!/^[a-zA-Z]+$/.test(securityAnswer)) {
+            throw new common_1.BadRequestException("Security answer must be a single word using letters only.");
         }
         const existing = await this.findUserByEmail(email);
         if (existing) {
             throw new common_1.BadRequestException("An account with this email already exists.");
         }
         const passwordHash = await bcrypt_1.default.hash(password, 10);
+        const securityAnswerHash = await bcrypt_1.default.hash(securityAnswer, 10);
         const role = this.isAdminEmail(email) ? "admin" : "student";
         const id = (0, node_crypto_1.randomUUID)();
         await this.databaseService.execute(`
-        INSERT INTO users (id, email, password_hash, interviews_used, api_key, name, role)
-        VALUES (?, ?, ?, 0, NULL, ?, ?)
-      `, [id, email, passwordHash, name, role]);
+        INSERT INTO users (
+          id,
+          email,
+          password_hash,
+          interviews_used,
+          api_key,
+          name,
+          role,
+          security_question,
+          security_answer_hash
+        )
+        VALUES (?, ?, ?, 0, NULL, ?, ?, ?, ?)
+      `, [id, email, passwordHash, name, role, securityQuestion, securityAnswerHash]);
         const user = await this.findUserById(id);
         return this.buildAuthResponse(user);
     }
@@ -59,65 +83,37 @@ let AuthService = class AuthService {
         }
         return this.buildAuthResponse(user);
     }
-    async requestPasswordReset(payload) {
+    async getSecurityQuestion(payload) {
         const email = payload.email.trim().toLowerCase();
         if (!email) {
             throw new common_1.BadRequestException("Email is required.");
         }
         const user = await this.findUserByEmail(email);
-        if (!user) {
-            return {
-                message: "If an account exists for that email, a password reset link has been generated.",
-            };
+        if (!user || !user.security_question || !user.security_answer_hash) {
+            throw new common_1.BadRequestException("No security question is configured for this account.");
         }
-        await this.databaseService.execute(`
-        UPDATE password_reset_tokens
-        SET used_at = COALESCE(used_at, CURRENT_TIMESTAMP)
-        WHERE user_id = ? AND used_at IS NULL
-      `, [user.id]);
-        const rawToken = (0, node_crypto_1.randomBytes)(32).toString("hex");
-        const tokenHash = this.hashResetToken(rawToken);
-        const expiresAt = new Date(Date.now() + 1000 * 60 * 30);
-        await this.databaseService.execute(`
-        INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, used_at)
-        VALUES (?, ?, ?, ?, NULL)
-      `, [(0, node_crypto_1.randomUUID)(), user.id, tokenHash, this.toSqlDateTime(expiresAt)]);
         return {
-            message: "If an account exists for that email, a password reset link has been generated.",
-            resetUrl: `${this.frontendBaseUrl.replace(/\/+$/, "")}/reset-password?token=${rawToken}`,
+            securityQuestion: user.security_question,
         };
     }
-    async resetPassword(payload) {
-        const token = payload.token.trim();
-        const password = payload.password.trim();
-        if (!token || !password) {
-            throw new common_1.BadRequestException("Reset token and new password are required.");
+    async loginWithSecurityAnswer(payload) {
+        const email = payload.email.trim().toLowerCase();
+        const securityAnswer = String(payload.securityAnswer || "").trim().toLowerCase();
+        if (!email || !securityAnswer) {
+            throw new common_1.BadRequestException("Email and security answer are required.");
         }
-        if (password.length < 6) {
-            throw new common_1.BadRequestException("Password must be at least 6 characters long.");
+        if (!/^[a-zA-Z]+$/.test(securityAnswer)) {
+            throw new common_1.BadRequestException("Security answer must be a single word using letters only.");
         }
-        if (!/^(?=.*[A-Z])(?=.*\d).+$/.test(password)) {
-            throw new common_1.BadRequestException("Password must contain at least one uppercase letter and one digit.");
+        const user = await this.findUserByEmail(email);
+        if (!user || !user.security_answer_hash) {
+            throw new common_1.UnauthorizedException("Incorrect security answer.");
         }
-        const existingToken = await this.findActiveResetToken(token);
-        if (!existingToken) {
-            throw new common_1.BadRequestException("This reset link is invalid or has expired.");
+        const answerMatches = await bcrypt_1.default.compare(securityAnswer, user.security_answer_hash);
+        if (!answerMatches) {
+            throw new common_1.UnauthorizedException("Incorrect security answer.");
         }
-        const passwordHash = await bcrypt_1.default.hash(password, 10);
-        await this.databaseService.transaction(async (executor) => {
-            await executor.execute("UPDATE users SET password_hash = ? WHERE id = ?", [
-                passwordHash,
-                existingToken.user_id,
-            ]);
-            await executor.execute(`
-          UPDATE password_reset_tokens
-          SET used_at = CURRENT_TIMESTAMP
-          WHERE user_id = ? AND used_at IS NULL
-        `, [existingToken.user_id]);
-        });
-        return {
-            message: "Password reset successful. You can now sign in with your new password.",
-        };
+        return this.buildAuthResponse(user);
     }
     async getProfile(userId) {
         const user = await this.findUserById(userId);
@@ -156,17 +152,6 @@ let AuthService = class AuthService {
     async findUserByEmail(email) {
         return this.databaseService.queryOne("SELECT * FROM users WHERE email = ? LIMIT 1", [email]);
     }
-    async findActiveResetToken(token) {
-        const tokenHash = this.hashResetToken(token);
-        return this.databaseService.queryOne(`
-        SELECT *
-        FROM password_reset_tokens
-        WHERE token_hash = ?
-          AND used_at IS NULL
-          AND expires_at >= CURRENT_TIMESTAMP
-        LIMIT 1
-      `, [tokenHash]);
-    }
     buildAuthResponse(user) {
         if (!user) {
             throw new common_1.UnauthorizedException("User not found.");
@@ -199,12 +184,6 @@ let AuthService = class AuthService {
     isAdminEmail(email) {
         const configured = (process.env.ADMIN_EMAIL || "admin@local.test").trim().toLowerCase();
         return email === configured;
-    }
-    hashResetToken(token) {
-        return (0, node_crypto_1.createHash)("sha256").update(token).digest("hex");
-    }
-    toSqlDateTime(date) {
-        return date.toISOString().slice(0, 19).replace("T", " ");
     }
 };
 exports.AuthService = AuthService;

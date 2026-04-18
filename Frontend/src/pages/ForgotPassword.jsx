@@ -1,19 +1,21 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
-import { requestPasswordReset } from "../services/api";
+import { Link, useNavigate } from "react-router-dom";
+import { loginWithSecurityAnswer, requestPasswordReset } from "../services/api";
+import { setStoredAuth } from "../services/auth";
 
 function ForgotPassword() {
   const [email, setEmail] = useState("");
+  const [securityQuestion, setSecurityQuestion] = useState("");
+  const [securityAnswer, setSecurityAnswer] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [resetUrl, setResetUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const navigate = useNavigate();
 
-  const handleSubmit = async (event) => {
+  const handleEmailSubmit = async (event) => {
     event.preventDefault();
     setError("");
     setMessage("");
-    setResetUrl("");
 
     const normalizedEmail = email.trim();
     if (!normalizedEmail) {
@@ -24,10 +26,41 @@ function ForgotPassword() {
     try {
       setIsSubmitting(true);
       const response = await requestPasswordReset({ email: normalizedEmail });
-      setMessage(response?.message || "Check your email for a reset link.");
-      setResetUrl(response?.resetUrl || "");
+      setSecurityQuestion(response?.securityQuestion || "");
+      setMessage("Answer your security question to sign in.");
     } catch (err) {
-      setError(err?.message || "Unable to start password reset.");
+      setError(err?.message || "Unable to load the security question.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleAnswerSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+
+    const normalizedAnswer = securityAnswer.trim().toLowerCase();
+    if (!normalizedAnswer) {
+      setError("Security answer is required");
+      return;
+    }
+
+    if (!/^[a-zA-Z]+$/.test(normalizedAnswer)) {
+      setError("Security answer must be a single word");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const session = await loginWithSecurityAnswer({
+        email: email.trim(),
+        securityAnswer: normalizedAnswer,
+      });
+      setStoredAuth(session);
+      navigate("/home");
+    } catch (err) {
+      setError(err?.message || "Incorrect security answer.");
     } finally {
       setIsSubmitting(false);
     }
@@ -40,36 +73,58 @@ function ForgotPassword() {
           SkillBarter
         </Link>
 
-        <h2>Reset your password</h2>
+        <h2>Forgot password</h2>
         <p className="auth-subtitle-modern">
-          Enter your email and we&apos;ll generate a password reset link.
+          Enter your email, answer your security question, and we&apos;ll sign you in.
         </p>
 
-        <form onSubmit={handleSubmit} className="auth-form-modern">
+        <form
+          onSubmit={securityQuestion ? handleAnswerSubmit : handleEmailSubmit}
+          className="auth-form-modern"
+        >
           <div className="form-group">
             <label>Email</label>
             <input
               type="email"
-              className={`input-modern ${error ? "input-error" : ""}`}
+              className={`input-modern ${error && !securityQuestion ? "input-error" : ""}`}
               placeholder="Enter your email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+              disabled={Boolean(securityQuestion)}
             />
           </div>
 
-          {/* {error ? <div className="error-text">{error}</div> : null}
+          {securityQuestion ? (
+            <div className="form-group">
+              <label>Security Question</label>
+              <input type="text" className="input-modern" value={securityQuestion} readOnly />
+            </div>
+          ) : null}
+
+          {securityQuestion ? (
+            <div className="form-group">
+              <label>Answer</label>
+              <input
+                type="text"
+                className={`input-modern ${error ? "input-error" : ""}`}
+                placeholder="Single word answer"
+                value={securityAnswer}
+                onChange={(event) => setSecurityAnswer(event.target.value)}
+              />
+            </div>
+          ) : null}
+
+          {error ? <div className="error-text">{error}</div> : null}
           {message ? <div className="success-text">{message}</div> : null}
-          {resetUrl ? (
-            <div className="helper-text">
-              Local reset link:{" "}
-              <a href={resetUrl} className="auth-link-modern">
-                Open reset page
-              </a>
-            </div> */}
-          {/* ) : null} */}
 
           <button type="submit" className="btn-primary-modern w-full-modern" disabled={isSubmitting}>
-            {isSubmitting ? "Generating..." : "Send reset link"}
+            {isSubmitting
+              ? securityQuestion
+                ? "Signing in..."
+                : "Loading question..."
+              : securityQuestion
+                ? "Verify and sign in"
+                : "Continue"}
           </button>
         </form>
 

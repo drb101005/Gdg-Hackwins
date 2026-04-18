@@ -224,6 +224,8 @@ let DatabaseService = DatabaseService_1 = class DatabaseService {
         await this.ensureColumnExists("interviews", "company", "VARCHAR(255) NULL");
         await this.ensureColumnExists("interviews", "focus_areas", "TEXT NULL");
         await this.ensureColumnExists("interviews", "question_source", "VARCHAR(32) NULL");
+        await this.ensureColumnExists("users", "security_question", "VARCHAR(255) NULL");
+        await this.ensureColumnExists("users", "security_answer_hash", "VARCHAR(255) NULL");
     }
     async seedAdminUser() {
         const email = (process.env.ADMIN_EMAIL || "admin@local.test").trim().toLowerCase();

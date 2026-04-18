@@ -251,6 +251,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     await this.ensureColumnExists("interviews", "company", "VARCHAR(255) NULL");
     await this.ensureColumnExists("interviews", "focus_areas", "TEXT NULL");
     await this.ensureColumnExists("interviews", "question_source", "VARCHAR(32) NULL");
+    await this.ensureColumnExists("users", "security_question", "VARCHAR(255) NULL");
+    await this.ensureColumnExists("users", "security_answer_hash", "VARCHAR(255) NULL");
   }
 
   private async seedAdminUser() {
