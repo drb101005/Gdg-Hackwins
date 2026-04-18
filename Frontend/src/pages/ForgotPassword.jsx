@@ -57,7 +57,7 @@ function ForgotPassword() {
             />
           </div>
 
-          {error ? <div className="error-text">{error}</div> : null}
+          {/* {error ? <div className="error-text">{error}</div> : null}
           {message ? <div className="success-text">{message}</div> : null}
           {resetUrl ? (
             <div className="helper-text">
@@ -65,8 +65,8 @@ function ForgotPassword() {
               <a href={resetUrl} className="auth-link-modern">
                 Open reset page
               </a>
-            </div>
-          ) : null}
+            </div> */}
+          {/* ) : null} */}
 
           <button type="submit" className="btn-primary-modern w-full-modern" disabled={isSubmitting}>
             {isSubmitting ? "Generating..." : "Send reset link"}
