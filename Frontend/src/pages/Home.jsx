@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { ArrowRight, BrainCircuit, Database, Mic, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { createInterview, getSystemHealth } from "../services/api";
@@ -81,52 +82,102 @@ function Home() {
 
   return (
     <div className="home-modern">
-      <div className="home-header">
-        <h1>Start a new session</h1>
-        <p>
-          Create a local interview session, store everything in MySQL, and save
-          each recording directly on this machine.
-        </p>
+      <div className="home-hero-modern">
+        <div className="home-header">
+          <span className="section-badge-modern">Session setup</span>
+          <h1>Start a new session</h1>
+          <p>
+            Build a practice round with role context, targeted prompts, and locally saved recordings so your prep
+            feels structured from the first question.
+          </p>
+        </div>
+
+        <div className="home-hero-panel">
+          <div className="home-hero-status">
+            <span>Backend</span>
+            <strong>{systemStatus.loading ? "Checking..." : systemStatus.backendReady ? "Ready" : "Offline"}</strong>
+          </div>
+          <div className="home-hero-status">
+            <span>AI service</span>
+            <strong>{systemStatus.loading ? "Checking..." : systemStatus.aiReady ? "Ready" : "Optional"}</strong>
+          </div>
+          <div className="home-hero-status">
+            <span>Sessions created</span>
+            <strong>{Number(user?.interviews_used || 0)}</strong>
+          </div>
+        </div>
       </div>
 
-      <div className="card-modern">
-        <h3>Session History</h3>
-        <p className="hint-modern">
-          Total interviews created: <strong>{Number(user?.interviews_used || 0)}</strong>
-        </p>
-        {/* <p className="hint-modern">
-          Start as many interview sessions as you need. Local STT handles transcript metrics directly from the saved WAV answers.
-        </p> */}
+      <div className="home-highlights-grid">
+        <div className="card-modern home-highlight-card">
+          <div className="home-highlight-icon">
+            <BrainCircuit size={20} />
+          </div>
+          <h3>Sharper prompts</h3>
+          <p className="hint-modern">Add resume and JD context to get questions that feel closer to a real panel.</p>
+        </div>
+
+        <div className="card-modern home-highlight-card">
+          <div className="home-highlight-icon">
+            <Mic size={20} />
+          </div>
+          <h3>Recorded locally</h3>
+          <p className="hint-modern">Each answer is captured on-device so you can replay and review without cloud lock-in.</p>
+        </div>
+
+        <div className="card-modern home-highlight-card">
+          <div className="home-highlight-icon">
+            <Database size={20} />
+          </div>
+          <h3>Saved progress</h3>
+          <p className="hint-modern">Your sessions, scoring, and context stay tied to the local app workflow.</p>
+        </div>
       </div>
 
-      {/* <div className="card-modern">
-        <h3>System Status</h3>
+      <div className="card-modern system-status-card-modern">
+        <div className="system-status-header-modern">
+          <div>
+            <span className="section-badge-modern muted">System status</span>
+            <h3>Local services</h3>
+          </div>
+          <div className={`system-status-pill ${systemStatus.backendReady ? "healthy" : "warning"}`}>
+            {systemStatus.backendReady ? "Ready to start" : "Attention needed"}
+          </div>
+        </div>
         <p className="hint-modern">
           {systemStatus.loading
-            ? "Checking local backend and processing services..."
-            : systemStatus.backendReady
-              ? "Local backend is reachable."
-              : systemStatus.message || "Local backend is unavailable."}
+            ? "Checking backend and optional AI services..."
+            : systemStatus.message || "Backend status updated from local health checks."}
         </p>
-        <p className="hint-modern">
-          {systemStatus.loading
-            ? "Optional AI service status pending."
-            : systemStatus.aiReady
-              ? "Optional FastAPI services are reachable."
-              : "FastAPI is unavailable. Interview transcripts and metrics still run through the local STT pipeline."}
-        </p>
+        <div className="system-status-grid-modern">
+          <div className="system-status-item-modern">
+            <strong>Interview backend</strong>
+            <span>{systemStatus.backendReady ? "Connected" : "Unavailable"}</span>
+          </div>
+          <div className="system-status-item-modern">
+            <strong>AI generation</strong>
+            <span>{systemStatus.aiReady ? "Connected" : "Fallback/local flow"}</span>
+          </div>
+        </div>
         {systemStatus.warnings.map((warning) => (
           <p key={warning} className="hint-modern">
             {warning}
           </p>
         ))}
-        <p className="hint-modern">
-          When you provide resume or role context, interview creation now requires AI question generation to succeed.
-        </p>
-      </div> */}
+      </div>
 
       <div className="card-modern">
-        <h3>Interview Setup</h3>
+        <div className="home-form-header-modern">
+          <div>
+            <span className="section-badge-modern muted">Configuration</span>
+            <h3>Interview setup</h3>
+          </div>
+          <div className="setup-chip-row-modern">
+            <span className="setup-chip-modern">Role-driven</span>
+            <span className="setup-chip-modern">Timed rounds</span>
+            <span className="setup-chip-modern">Local review</span>
+          </div>
+        </div>
 
         <div className="settings-grid-modern">
           <div>
@@ -225,8 +276,21 @@ function Home() {
         onClick={handleStart}
         disabled={isSubmitting || !systemStatus.backendReady}
       >
-        {isSubmitting ? "Preparing..." : "Begin Session"}
+        {isSubmitting ? "Preparing..." : <>Begin Session <ArrowRight size={16} /></>}
       </button>
+
+      <div className="card-modern home-tip-card-modern">
+        <div className="home-tip-icon">
+          <Sparkles size={18} />
+        </div>
+        <div>
+          <h3>Best results come from richer context</h3>
+          <p className="hint-modern">
+            Add concrete projects, ownership, and target-role expectations. The better the context, the more realistic
+            the interview flow feels.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

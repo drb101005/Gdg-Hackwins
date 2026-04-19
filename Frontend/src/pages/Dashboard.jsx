@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { ArrowUpRight, CheckCircle2, CircleDashed, Clock3 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { getDashboardSummary } from "../services/api";
 
@@ -51,6 +52,7 @@ function Dashboard() {
     <div className="dashboard-modern">
       <div className="dashboard-header-modern">
         <div>
+          <span className="section-badge-modern">Insights</span>
           <h1>Your Progress</h1>
           <p>Track improvement over time and identify weak spots.</p>
         </div>
@@ -86,7 +88,12 @@ function Dashboard() {
       {error && <div className="error-text">{error}</div>}
 
       <div className="sessions-modern">
-        <h3>Recent Sessions</h3>
+        <div className="sessions-header-modern">
+          <div>
+            <h3>Recent Sessions</h3>
+            <p className="hint-modern">Open a completed summary or jump back into an in-progress round.</p>
+          </div>
+        </div>
 
         {summary.interviews.map((session) => (
           <Link
@@ -95,17 +102,26 @@ function Dashboard() {
             to={session.completed ? `/summary/${session.id}` : "/interview"}
             state={session.completed ? undefined : { interviewId: session.id }}
           >
-            <div>
+            <div className="session-main-modern">
               <strong>
-                {session.type} · {session.difficulty}
+                {session.type} - {session.difficulty}
               </strong>
               <div className="session-meta-modern">
-                {new Date(session.created_at).toLocaleDateString()} · {session.status}
+                <span><Clock3 size={14} /> {new Date(session.created_at).toLocaleDateString()}</span>
+                <span>
+                  {session.completed ? <CheckCircle2 size={14} /> : <CircleDashed size={14} />}
+                  {session.status}
+                </span>
               </div>
             </div>
 
-            <div className="session-score-modern">
-              {session.total_score ? session.total_score.toFixed(1) : "In Progress"}
+            <div className="session-score-block-modern">
+              <div className="session-score-modern">
+                {session.total_score ? session.total_score.toFixed(1) : "In Progress"}
+              </div>
+              <span className="session-open-modern">
+                Open <ArrowUpRight size={14} />
+              </span>
             </div>
           </Link>
         ))}

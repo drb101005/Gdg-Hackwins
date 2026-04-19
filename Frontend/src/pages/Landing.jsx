@@ -23,7 +23,7 @@ function Landing() {
 
       <nav className="landing-nav-modern">
         <Link to="/" className="logo-modern">
-          SkillBarter
+          Skill Barter
         </Link>
 
         <div className="nav-links-modern">

@@ -54,7 +54,7 @@ node_modules/
 .env
 
 backend/data/*.db
-backend/uploads/audio/*
+backend/uploads/audio/* 
 !backend/uploads/audio/.gitkeep
 backend/uploads/video/*
 !backend/uploads/video/.gitkeep

@@ -52,7 +52,7 @@ function Login() {
     <div className="auth-modern">
       <div className="auth-card-modern">
         <Link to="/" className="auth-logo-modern">
-          SkillBarter
+          Skill Barter
         </Link>
 
         <h2>Welcome back</h2>
