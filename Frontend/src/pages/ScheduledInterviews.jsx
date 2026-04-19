@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { ArrowRight, Clock3, PlayCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { listInterviews } from "../services/api";
 
@@ -23,31 +24,47 @@ function ScheduledInterviews() {
   return (
     <div className="scheduled-modern">
       <div className="scheduled-header-modern">
+        <span className="section-badge-modern">Active sessions</span>
         <h1>Active Interviews</h1>
-        <p>Continue any in-progress interview</p>
+        <p>Jump back into any in-progress interview without rebuilding the setup.</p>
       </div>
 
-      <div className="scheduled-list-modern">
-        <h3>Active Sessions</h3>
+      <div className="card-modern scheduled-list-card-modern">
+        <div className="sessions-header-modern">
+          <div>
+            <h3>Continue where you paused</h3>
+            <p className="hint-modern">Each session keeps its question flow and current progress.</p>
+          </div>
+        </div>
 
-        {scheduled.map((session) => (
-          <div key={session.id} className="scheduled-item-modern">
-            <div>
-              <strong>
-                {session.type} · {session.difficulty}
-              </strong>
-              <div className="session-meta-modern">
-                {new Date(session.created_at).toLocaleString()} · {session.status}
+        <div className="scheduled-list-modern">
+          {scheduled.map((session) => (
+            <div key={session.id} className="scheduled-item-modern">
+              <div className="session-main-modern">
+                <strong>{session.type} - {session.difficulty}</strong>
+                <div className="session-meta-modern">
+                  <span><Clock3 size={14} /> {new Date(session.created_at).toLocaleString()}</span>
+                  <span>{session.status}</span>
+                </div>
               </div>
-            </div>
 
-            <button className="btn-secondary-modern" onClick={() => handleStartSession(session)}>
-              Continue
+              <button className="btn-secondary-modern" onClick={() => handleStartSession(session)}>
+                <PlayCircle size={16} />
+                Continue
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {!scheduled.length && (
+          <div className="scheduled-empty-modern">
+            <p className="hint-modern">No active interviews yet. Start one from the home page and it will show up here.</p>
+            <button className="btn-primary-modern" onClick={() => navigate("/home")}>
+              Start a session <ArrowRight size={16} />
             </button>
           </div>
-        ))}
+        )}
 
-        {!scheduled.length && <p className="hint-modern">No active interviews yet. Start one from Home.</p>}
         {error && <div className="error-text">{error}</div>}
       </div>
     </div>

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { ArrowRight, AudioLines, Sparkles, TimerReset } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { signup } from "../services/api";
 import { setStoredAuth } from "../services/auth";
@@ -87,92 +88,125 @@ function Signup() {
 
   return (
     <div className="auth-modern">
-      <div className="auth-card-modern">
-        <Link to="/" className="auth-logo-modern">
-          SkillBarter
-        </Link>
-
-        <h2>Create account</h2>
-        <p className="auth-subtitle-modern">Start building your interview confidence.</p>
-
-        <form onSubmit={handleSubmit} className="auth-form-modern">
-          <div className="form-group">
-            <label>Full Name</label>
-            <input
-              type="text"
-              className={`input-modern ${errors.name ? "input-error" : ""}`}
-              placeholder="Enter your full name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-            {errors.name ? <span className="error-text">{errors.name}</span> : null}
-          </div>
-
-          <div className="form-group">
-            <label>Email</label>
-            <input
-              type="email"
-              className={`input-modern ${errors.email ? "input-error" : ""}`}
-              placeholder="Enter your email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-            {errors.email ? <span className="error-text">{errors.email}</span> : null}
-          </div>
-
-          <div className="form-group">
-            <label>Password</label>
-            <input
-              type="password"
-              className={`input-modern ${errors.password ? "input-error" : ""}`}
-              placeholder="Create a password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-            {errors.password ? <span className="error-text">{errors.password}</span> : null}
-          </div>
-
-          <div className="form-group">
-            <label>Security Question</label>
-            <select
-              className={`input-modern ${errors.securityQuestion ? "input-error" : ""}`}
-              value={securityQuestion}
-              onChange={(event) => setSecurityQuestion(event.target.value)}
-            >
-              {SECURITY_QUESTIONS.map((question) => (
-                <option key={question} value={question}>
-                  {question}
-                </option>
-              ))}
-            </select>
-            {errors.securityQuestion ? <span className="error-text">{errors.securityQuestion}</span> : null}
-          </div>
-
-          <div className="form-group">
-            <label>Security Answer</label>
-            <input
-              type="text"
-              className={`input-modern ${errors.securityAnswer ? "input-error" : ""}`}
-              placeholder="Single word answer"
-              value={securityAnswer}
-              onChange={(event) => setSecurityAnswer(event.target.value)}
-            />
-            {errors.securityAnswer ? <span className="error-text">{errors.securityAnswer}</span> : null}
-          </div>
-
-          {authError ? <span className="error-text">{authError}</span> : null}
-
-          <button type="submit" className="btn-primary-modern w-full-modern" disabled={isSubmitting}>
-            {isSubmitting ? "Creating..." : "Create Account"}
-          </button>
-        </form>
-
-        <p className="auth-footer-modern">
-          Already have an account?{" "}
-          <Link to="/login" className="auth-link-modern">
-            Sign in
+      <div className="auth-shell-modern">
+        <div className="auth-card-modern">
+          <Link to="/" className="auth-logo-modern">
+            Skill Barter
           </Link>
-        </p>
+
+          <div className="auth-header-modern">
+            <span className="section-badge-modern muted">Create account</span>
+            <h2>Start practicing with a setup that feels real.</h2>
+            <p className="auth-subtitle-modern">Create your local account once, then keep every mock interview, summary, and progress view in one place.</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="auth-form-modern">
+            <div className="form-group">
+              <label>Full Name</label>
+              <input
+                type="text"
+                className={`input-modern ${errors.name ? "input-error" : ""}`}
+                placeholder="Enter your full name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+              {errors.name ? <span className="error-text">{errors.name}</span> : null}
+            </div>
+
+            <div className="form-group">
+              <label>Email</label>
+              <input
+                type="email"
+                className={`input-modern ${errors.email ? "input-error" : ""}`}
+                placeholder="Enter your email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+              {errors.email ? <span className="error-text">{errors.email}</span> : null}
+            </div>
+
+            <div className="form-group">
+              <label>Password</label>
+              <input
+                type="password"
+                className={`input-modern ${errors.password ? "input-error" : ""}`}
+                placeholder="Create a password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              {errors.password ? <span className="error-text">{errors.password}</span> : null}
+            </div>
+
+            <div className="form-group">
+              <label>Security Question</label>
+              <select
+                className={`input-modern ${errors.securityQuestion ? "input-error" : ""}`}
+                value={securityQuestion}
+                onChange={(event) => setSecurityQuestion(event.target.value)}
+              >
+                {SECURITY_QUESTIONS.map((question) => (
+                  <option key={question} value={question}>
+                    {question}
+                  </option>
+                ))}
+              </select>
+              {errors.securityQuestion ? <span className="error-text">{errors.securityQuestion}</span> : null}
+            </div>
+
+            <div className="form-group">
+              <label>Security Answer</label>
+              <input
+                type="text"
+                className={`input-modern ${errors.securityAnswer ? "input-error" : ""}`}
+                placeholder="Single word answer"
+                value={securityAnswer}
+                onChange={(event) => setSecurityAnswer(event.target.value)}
+              />
+              {errors.securityAnswer ? <span className="error-text">{errors.securityAnswer}</span> : null}
+            </div>
+
+            {authError ? <span className="error-text">{authError}</span> : null}
+
+            <button type="submit" className="btn-primary-modern w-full-modern" disabled={isSubmitting}>
+              {isSubmitting ? "Creating..." : <>Create account <ArrowRight size={16} /></>}
+            </button>
+          </form>
+
+          <p className="auth-footer-modern">
+            Already have an account?{" "}
+            <Link to="/login" className="auth-link-modern">
+              Sign in
+            </Link>
+          </p>
+        </div>
+
+        <div className="auth-context-modern">
+          <span className="section-badge-modern">What you unlock</span>
+          <h3>Everything you need to move from prep to repeatable practice.</h3>
+          <div className="auth-benefit-list-modern">
+            <div className="auth-benefit-item-modern">
+              <TimerReset size={18} />
+              <div>
+                <strong>Timed sessions</strong>
+                <p>Answer in a format that feels closer to a live interview than a static questionnaire.</p>
+              </div>
+            </div>
+            <div className="auth-benefit-item-modern">
+              <AudioLines size={18} />
+              <div>
+                <strong>Recorded answers</strong>
+                <p>Capture how you actually sound so you can improve delivery, pacing, and confidence.</p>
+              </div>
+            </div>
+            <div className="auth-benefit-item-modern">
+              <Sparkles size={18} />
+              <div>
+                <strong>Session-based feedback</strong>
+                <p>Track what changed after each round rather than starting over every time.</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

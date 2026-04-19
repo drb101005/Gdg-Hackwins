@@ -1,33 +1,33 @@
 import React, { useEffect, useState } from "react";
+import { MoonStar, SunMedium } from "lucide-react";
 
 function ThemeToggle() {
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return localStorage.getItem("theme") === "dark";
+  });
 
   useEffect(() => {
-    const saved = localStorage.getItem("theme");
-    if (saved === "dark") {
+    if (darkMode) {
       document.documentElement.classList.add("dark");
-      setDarkMode(true);
+    } else {
+      document.documentElement.classList.remove("dark");
     }
-  }, []);
+  }, [darkMode]);
 
   const toggleTheme = () => {
-    const root = document.documentElement;
-
-    if (darkMode) {
-      root.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    } else {
-      root.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    }
-
-    setDarkMode(!darkMode);
+    const nextMode = !darkMode;
+    localStorage.setItem("theme", nextMode ? "dark" : "light");
+    setDarkMode(nextMode);
   };
 
   return (
-    <button className="theme-toggle" onClick={toggleTheme}>
-      {darkMode ? "☀ Light" : "🌙 Dark"}
+    <button className="theme-toggle" onClick={toggleTheme} type="button" aria-label="Toggle theme">
+      {darkMode ? <SunMedium size={16} /> : <MoonStar size={16} />}
+      <span>{darkMode ? "Light" : "Dark"}</span>
     </button>
   );
 }

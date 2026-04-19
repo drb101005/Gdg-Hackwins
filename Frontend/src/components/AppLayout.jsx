@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { Outlet, useLocation } from "react-router-dom";
 import Sidebar from "./Sidebar.jsx";
@@ -45,10 +45,6 @@ function AppLayout() {
       title: "Skill Barter",
       description: "Keep your interview prep workflow moving.",
     };
-  }, [location.pathname]);
-
-  useEffect(() => {
-    setIsSidebarOpen(false);
   }, [location.pathname]);
 
   return (

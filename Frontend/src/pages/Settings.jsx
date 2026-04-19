@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from "react";
+import { KeyRound, Save, UserRound } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { updateProfile } from "../services/api";
 import { updateStoredUser } from "../services/auth";
 
 function Settings() {
-  const [notifications, setNotifications] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(false);
   const [name, setName] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
@@ -33,25 +32,48 @@ function Settings() {
   return (
     <div className="settings-modern">
       <div className="settings-header-modern">
+        <span className="section-badge-modern">Preferences</span>
         <h1>Settings</h1>
         <p>Manage your account and application preferences.</p>
       </div>
 
-      <div className="card-modern">
-        <h3>Account</h3>
+      <div className="stats-grid-modern">
+        <div className="stat-card-modern">
+          <h4>Profile</h4>
+          <div className="stat-value-modern">{name ? name.split(" ")[0] : "User"}</div>
+          <span className="stat-label-modern">Display name on this device</span>
+        </div>
+
+        <div className="stat-card-modern">
+          <h4>Sessions Created</h4>
+          <div className="stat-value-modern">{user?.interviews_used || 0}</div>
+          <span className="stat-label-modern">Interviews tracked on this account</span>
+        </div>
+      </div>
+
+      <div className="card-modern settings-card-enhanced-modern">
+        <div className="settings-card-header-modern">
+          <div>
+            <span className="section-badge-modern muted">Account</span>
+            <h3>Your saved profile</h3>
+          </div>
+        </div>
 
         <div className="settings-row-modern">
           <div>
             <label className="label-modern">Display Name</label>
             <p className="hint-modern">Your local profile name</p>
           </div>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="input-modern"
-            style={{ maxWidth: "220px" }}
-          />
+          <div className="settings-input-inline-modern">
+            <UserRound size={16} />
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="input-modern"
+              style={{ maxWidth: "220px" }}
+            />
+          </div>
         </div>
 
         <div className="settings-row-modern">
@@ -75,14 +97,17 @@ function Settings() {
             <label className="label-modern">API Key</label>
             <p className="hint-modern">Optional. Keep this only if you want the FastAPI Groq-powered features.</p>
           </div>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="input-modern"
-            style={{ maxWidth: "260px" }}
-            placeholder="Optional"
-          />
+          <div className="settings-input-inline-modern">
+            <KeyRound size={16} />
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="input-modern"
+              style={{ maxWidth: "260px" }}
+              placeholder="Optional"
+            />
+          </div>
         </div>
       </div>
 
@@ -114,10 +139,10 @@ function Settings() {
         </div> */}
       {/* </div> */}
 
-      {statusMessage && <div className="hint-modern">{statusMessage}</div>}
+      {statusMessage && <div className="card-modern status-card-modern"><p className="hint-modern">{statusMessage}</p></div>}
 
       <button className="btn-primary-modern" onClick={handleSave} disabled={saving}>
-        {saving ? "Saving..." : "Save Changes"}
+        {saving ? "Saving..." : <>Save Changes <Save size={16} /></>}
       </button>
     </div>
   );
