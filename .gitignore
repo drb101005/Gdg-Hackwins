@@ -59,4 +59,4 @@ backend/uploads/audio/*
 backend/uploads/video/*
 !backend/uploads/video/.gitkeep
 
-start-all.ps1
+v_finder.py
