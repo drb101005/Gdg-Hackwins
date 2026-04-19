@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -43,6 +44,7 @@ FILLER_PHRASES = [
 DEFAULT_PAUSE_THRESHOLD_SECONDS = 0.75
 DEFAULT_LOCAL_WHISPER_MODEL = "base"
 DEFAULT_LOCAL_WHISPER_TIMEOUT_SECONDS = 180
+logger = logging.getLogger("ai-service.local-whisper")
 
 app = FastAPI(title="Interview Analysis Service")
 
@@ -100,16 +102,39 @@ class TextAnswerRequest(BaseModel):
 
 class LocalWhisperService:
     def __init__(self) -> None:
-        self.device = self._detect_device()
+        self.requested_device = self._detect_device()
         self.model_size = self._get_model_size()
-        self.compute_type = self._get_compute_type(self.device)
+        self.requested_compute_type = self._get_compute_type(self.requested_device)
         self.timeout_seconds = self._get_timeout_seconds()
-        self.model = WhisperModel(
-            self.model_size,
-            device=self.device,
-            compute_type=self.compute_type,
-        )
+        self.device = self.requested_device
+        self.compute_type = self.requested_compute_type
+        self.fallback_reason = ""
+        self.model = self._build_model()
         self._lock = Lock()
+
+    def _build_model(self) -> WhisperModel:
+        try:
+            return WhisperModel(
+                self.model_size,
+                device=self.requested_device,
+                compute_type=self.requested_compute_type,
+            )
+        except Exception as exc:
+            if self.requested_device != "cuda":
+                raise
+
+            self.device = "cpu"
+            self.compute_type = "int8"
+            self.fallback_reason = str(exc)
+            logger.warning(
+                "CUDA Whisper init failed; falling back to CPU int8. Reason: %s",
+                self.fallback_reason,
+            )
+            return WhisperModel(
+                self.model_size,
+                device=self.device,
+                compute_type=self.compute_type,
+            )
 
     def _detect_device(self) -> str:
         forced = os.getenv("LOCAL_WHISPER_DEVICE", "auto").strip().lower()
@@ -451,8 +476,11 @@ def health():
         "question_generation_model": get_question_generation_model(),
         "local_transcription_engine": "faster-whisper",
         "local_transcription_model": local_whisper.model_size,
+        "local_transcription_requested_device": local_whisper.requested_device,
         "local_transcription_device": local_whisper.device,
+        "local_transcription_requested_compute_type": local_whisper.requested_compute_type,
         "local_transcription_compute_type": local_whisper.compute_type,
+        "local_transcription_fallback_reason": local_whisper.fallback_reason,
     }
 
 

@@ -48,12 +48,25 @@ class LocalSttModel:
         vad_filter: bool = DEFAULT_VAD_FILTER,
     ) -> None:
         self.model_size = model_size
+        self.requested_device = device
+        self.requested_compute_type = compute_type
         self.device = device
         self.compute_type = compute_type
         self.beam_size = beam_size
         self.vad_filter = vad_filter
-        self.model = WhisperModel(model_size, device=device, compute_type=compute_type)
+        self.model = self._build_model(model_size)
         self._lock = threading.Lock()
+
+    def _build_model(self, model_size: str) -> WhisperModel:
+        try:
+            return WhisperModel(model_size, device=self.device, compute_type=self.compute_type)
+        except Exception:
+            if self.device != "cuda":
+                raise
+
+            self.device = "cpu"
+            self.compute_type = "int8"
+            return WhisperModel(model_size, device=self.device, compute_type=self.compute_type)
 
     def transcribe_file(self, audio_path: str | Path) -> dict[str, object]:
         with self._lock:
