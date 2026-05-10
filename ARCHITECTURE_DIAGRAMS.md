@@ -75,7 +75,7 @@
                   └──────────┘      └────────────┘ └─────────┘
                   ↑ LLM calls       ↓ Transcribe  ↓ subprocess
                   (Questions,       (audio)      (fallback)
-                   Scoring)         
+                   Scoring)
 ```
 
 ---

@@ -3,10 +3,12 @@
 ## 1. CORE COMPONENTS
 
 ### 1.1 FRONTEND LAYER
+
 **Component:** React Frontend (Vite)
 **Location:** `/Frontend/src`
 **Port:** 5173 (dev), 3000 (prod implied)
 **Tech Stack:**
+
 - React 19
 - Vite build tool
 - React Router 7
@@ -15,6 +17,7 @@
 - Canvas API (video preview)
 
 **Sub-modules:**
+
 ```
 Pages (11 total):
 ├── Landing.jsx
@@ -54,10 +57,12 @@ Utils:
 ---
 
 ### 1.2 BACKEND LAYER
+
 **Component:** NestJS Application
 **Location:** `/backend/src`
 **Port:** 3001 (default)
 **Tech Stack:**
+
 - NestJS 11
 - TypeScript
 - Express (under the hood)
@@ -67,6 +72,7 @@ Utils:
 - Reflection metadata
 
 **Modules (5 total):**
+
 ```
 AppModule (root)
 ├── AuthModule
@@ -99,16 +105,19 @@ Common:
 ```
 
 **Static Assets:**
+
 - `/uploads/audio/` → WAV files
 - `/uploads/video/` → WebM/MP4 files
 
 ---
 
 ### 1.3 AI SERVICE LAYER
+
 **Component:** FastAPI Application (Python)
 **Location:** `/ai-service/main.py`
 **Port:** 8000 (default)
 **Tech Stack:**
+
 - FastAPI
 - Uvicorn ASGI server
 - Groq API (remote inference)
@@ -117,6 +126,7 @@ Common:
 - Python multipart
 
 **Endpoints (6 total):**
+
 ```
 /health                    → System status (GET)
 /transcribe                → Audio → text (POST)
@@ -127,6 +137,7 @@ Common:
 ```
 
 **Internal Services:**
+
 ```
 LocalWhisperService
 ├── Model init (auto-detect CUDA/CPU)
@@ -154,12 +165,14 @@ LLMResponseParsing
 ---
 
 ### 1.4 DATABASE LAYER
+
 **Component:** MySQL 8.0 Database
 **Connection:** mysql2/promise (NestJS backend)
 **Location:** Localhost or remote host (env-configured)
 **Port:** 3306 (default)
 
 **Tables (4 total):**
+
 ```
 users
 ├── id (UUID, PRIMARY KEY)
@@ -221,6 +234,7 @@ answers
 ```
 
 **Connection Pool:**
+
 - Default: 10 connections
 - Configurable via `DATABASE_CONNECTION_LIMIT` env var
 - Transactions supported for multi-query operations
@@ -230,16 +244,20 @@ answers
 ## 2. EXTERNAL SERVICES & INTEGRATIONS
 
 ### 2.1 GROQ API (Cloud LLM Inference)
+
 **Provider:** Groq (https://groq.com)
 **Models Used:**
+
 - `llama-3.3-70b-versatile` (default for questions + scoring)
 
 **Use Cases:**
+
 1. Question generation (10-second prompt)
 2. Answer evaluation (per-question scoring)
 3. Interview evaluation (overall feedback)
 
 **Failure Modes:**
+
 - 429 (Rate Limit) → 503 Service Unavailable
 - 408 (Timeout) → 504 Gateway Timeout
 - 5xx → 502 Bad Gateway
@@ -248,11 +266,13 @@ answers
 ---
 
 ### 2.2 FASTER-WHISPER (Local/Docker)
+
 **Provider:** openai-community/faster-whisper
 **Deployment:** Local process (spawned by backend)
 **Models Supported:** base, small, medium, large
 
 **Configuration:**
+
 ```
 WHISPER_MODEL_SIZE=base (default)
 WHISPER_DEVICE=auto (auto | cpu | cuda)
@@ -266,11 +286,13 @@ WHISPER_MAX_UPLOAD_BYTES=15728640 (15MB)
 ---
 
 ### 2.3 OPTIONAL LOCAL STT (Python subprocess)
+
 **Script:** `/stt.py`
 **Called By:** Backend via `LocalSttService`
 **Purpose:** Alternative transcription if FastAPI unavailable
 
 **Command:**
+
 ```bash
 python stt.py transcribe-file <audio_path>
 ```
@@ -280,6 +302,7 @@ python stt.py transcribe-file <audio_path>
 ---
 
 ### 2.4 FFMPEG (Optional)
+
 **Purpose:** Video codec conversion (if needed)
 **Detected By:** Backend health check
 **Status:** Optional (platform continues without it)
@@ -289,6 +312,7 @@ python stt.py transcribe-file <audio_path>
 ## 3. SERVICE-TO-SERVICE COMMUNICATION
 
 ### 3.1 Frontend ↔ Backend
+
 **Protocol:** HTTP/HTTPS
 **Content-Type:** JSON (+ multipart for file uploads)
 **Auth:** JWT Bearer token (localStorage)
@@ -296,6 +320,7 @@ python stt.py transcribe-file <audio_path>
 **Timeout:** 12 seconds (default), up to 120s for long operations
 
 **Request Flow:**
+
 ```
 Frontend
    ↓ (POST/GET with Authorization header)
@@ -305,6 +330,7 @@ NestJS Router → Controller → Service
 ```
 
 **Response Format:**
+
 ```json
 {
   "status": 200,
@@ -314,6 +340,7 @@ NestJS Router → Controller → Service
 ```
 
 **Error Format:**
+
 ```json
 {
   "status": 4xx | 5xx,
@@ -325,12 +352,14 @@ NestJS Router → Controller → Service
 ---
 
 ### 3.2 Backend ↔ AI Service
+
 **Protocol:** HTTP/HTTPS
 **Content-Type:** multipart/form-data (file) + JSON
 **Base URL:** `http://127.0.0.1:8000` (env: `AI_SERVICE_URL`)
 **Timeout:** 120-300 seconds (audio processing)
 
 **Endpoints Called:**
+
 ```
 POST /transcribe
 ├── Body: file (WAV audio)
@@ -338,8 +367,8 @@ POST /transcribe
 
 POST /analyze
 ├── Body: file (WAV), question_text, duration, api_key (optional)
-└── Response: { transcript, word_timestamps, wpm, pause_count, 
-                filler_count, silence_percent, duration, score, 
+└── Response: { transcript, word_timestamps, wpm, pause_count,
+                filler_count, silence_percent, duration, score,
                 feedback, improved_answer }
 
 POST /analyze-text
@@ -347,9 +376,9 @@ POST /analyze-text
 └── Response: { score, feedback, improved_answer }
 
 POST /generate-questions
-├── Body: { role, experience_level, type, company, resume_data, 
+├── Body: { role, experience_level, type, company, resume_data,
             job_description, focus_areas, api_key (optional) }
-└── Response: { intro_questions, resume_based_questions, 
+└── Response: { intro_questions, resume_based_questions,
                 core_questions, question_source }
 
 POST /evaluate-interview
@@ -360,12 +389,14 @@ POST /evaluate-interview
 ---
 
 ### 3.3 Backend ↔ Database
+
 **Protocol:** TCP (MySQL protocol)
 **Connection Pool:** 10 default (configurable)
 **Queries:** Parameterized (prepared statements)
 **Transactions:** Supported
 
 **Lifecycle:**
+
 ```
 Backend boots
    ↓ (onModuleInit)
@@ -381,11 +412,13 @@ Ready for queries
 ---
 
 ### 3.4 Backend → Local STT (Python)
+
 **Protocol:** Child process (spawn)
 **Communication:** stdout/stderr
 **Timeout:** 120 seconds (configurable)
 
 **Invocation:**
+
 ```bash
 python /path/to/stt.py transcribe-file /path/to/audio.wav
 ```
@@ -397,6 +430,7 @@ python /path/to/stt.py transcribe-file /path/to/audio.wav
 ## 4. AUTHENTICATION & AUTHORIZATION FLOW
 
 ### 4.1 Signup Flow
+
 ```
 User (Frontend)
    ↓ (POST /auth/signup with email, password, security Q&A)
@@ -422,6 +456,7 @@ User logged in ✓
 ```
 
 ### 4.2 Login Flow
+
 ```
 User (Frontend)
    ↓ (POST /auth/login with email, password)
@@ -441,6 +476,7 @@ Subsequent requests include Authorization: Bearer <token>
 ```
 
 ### 4.3 JWT Validation (Protected Routes)
+
 ```
 Frontend (next API call)
    ↓ (Header: Authorization: Bearer <token>)
@@ -460,6 +496,7 @@ Or return 401 Unauthorized
 ```
 
 ### 4.4 Role-Based Access (Admin)
+
 ```
 User (Frontend)
    ↓ (GET /admin/overview)
@@ -477,6 +514,7 @@ Else: return 403 Forbidden
 ---
 
 ### 4.5 Password Recovery Flow
+
 ```
 User (Frontend)
    ↓ (POST /auth/forgot-password with email)
@@ -507,26 +545,27 @@ Return { user, token }
 ## 5. REQUEST LIFECYCLE (Interview Creation → Results)
 
 ### 5.1 CREATE INTERVIEW (POST /interviews)
+
 ```
 [1] Frontend.Home
     ↓ createInterview({role, experience, resume, JD, focusAreas})
-    
+
 [2] Frontend API Client
     ↓ POST http://127.0.0.1:3001/interviews
     ↓ Header: Authorization: Bearer <token>
     ↓ Body: JSON payload
-    
+
 [3] Backend.InterviewsController.create()
     ↓ @CurrentUser() validates JWT
     ↓ Validates input
-    
+
 [4] Backend.InterviewsService.createInterview()
     ↓ Generate UUID for interview
     ↓ Insert into database: interviews table
     ├─ status: 'in_progress'
     ├─ current_question_index: 0
     └─ resume/JD/role/focus_areas stored
-    
+
 [5] Backend.InterviewsService → Groq (async)
     ↓ Call AI Service POST /generate-questions
     ├─ Payload: role, experience_level, type, company, resume_data, JD, focus_areas
@@ -540,11 +579,11 @@ Return { user, token }
        ├─ Fallback: return empty questions array OR
        ├─ question_source: 'fallback'
        └─ question_text: "Tell me about yourself"
-    
+
 [6] Backend → Database (transaction)
     ├─ Commit interview + questions
     └─ Return interview + questions to frontend
-    
+
 [7] Frontend → User
     ↓ Display first question on Interview page
     ↓ Start timer (30 seconds)
@@ -553,16 +592,17 @@ Return { user, token }
 ---
 
 ### 5.2 SUBMIT ANSWER (POST /interviews/:id/answers)
+
 ```
 [1] Frontend.Interview (on timer expiry or manual submit)
     ↓ Record audio blob (MediaRecorder)
     ↓ Record video blob (optional MediaRecorder)
     ↓ calculateDuration()
-    
+
 [2] Frontend.Audio Utils
     ↓ Convert audio blob to WAV (via Canvas)
     ↓ Select MIME type (audio/wav | audio/webm | fallback)
-    
+
 [3] Frontend API Client
     ↓ POST http://127.0.0.1:3001/interviews/:id/answers
     ├─ multipart/form-data
@@ -572,19 +612,19 @@ Return { user, token }
     │  ├─ questionId: <UUID>
     │  └─ duration: <seconds>
     └─ Header: Authorization: Bearer <token>
-    
+
 [4] Backend.InterviewsController.submitAnswer()
     ↓ FileFieldsInterceptor (Multer)
     ├─ Parse multipart data
     ├─ Save audio → /uploads/audio/<UUID>.wav
     ├─ Save video → /uploads/video/<UUID>.webm (if present)
     └─ Extract fields: questionId, duration
-    
+
 [5] Backend.InterviewsService.saveAnswer()
     ├─ Validate question belongs to interview
     ├─ Validate user owns interview
     └─ Check answer not already submitted
-    
+
 [6] Backend.InterviewsService → AI Service (async)
     ↓ POST http://127.0.0.1:8000/analyze
     ├─ multipart/form-data
@@ -605,12 +645,12 @@ Return { user, token }
        ├─ score: 7.5
        ├─ feedback: "Clear explanation but rushed. ..."
        └─ improved_answer: "Start with... then add... finally..."
-    
+
 [7] If Groq unavailable (no API key):
     ├─ Skip scoring (score = 0)
     ├─ Use only transcription metrics
     └─ Continue without error
-    
+
 [8] Backend.InterviewsService.saveAnswer() → Database
     ├─ Insert into answers table:
     │  ├─ question_id
@@ -623,7 +663,7 @@ Return { user, token }
     │  └─ created_at
     ├─ Update interviews.current_question_index → 1
     └─ Return answer data
-    
+
 [9] Frontend.Interview
     ↓ Display score card
     ├─ Score: 7.5/10
@@ -631,7 +671,7 @@ Return { user, token }
     ├─ Metrics: WPM 120, pauses 3, fillers 2, silence 18%
     ├─ Audio replay
     └─ "Next Question" button
-    
+
 [10] User clicks "Next" or timer expires
     ↓ Repeat 5.2 for remaining 9 questions
 ```
@@ -639,10 +679,11 @@ Return { user, token }
 ---
 
 ### 5.3 COMPLETE INTERVIEW (POST /interviews/:id/complete)
+
 ```
 [1] Frontend.Interview (after all 10 answers submitted)
     ↓ POST http://127.0.0.1:3001/interviews/:id/complete
-    
+
 [2] Backend.InterviewsService.completeInterview()
     ├─ Query answers table (all answers for this interview)
     ├─ Calculate overall_score = AVG(answer.score)
@@ -655,7 +696,7 @@ Return { user, token }
     │  ├─ overall_feedback = <from Groq>
     │  └─ status = 'completed'
     └─ Return interview + answers
-    
+
 [3] Frontend → Redirect to /summary/:id
     ↓ Display results page
 ```
@@ -663,21 +704,22 @@ Return { user, token }
 ---
 
 ### 5.4 FETCH SUMMARY (GET /interviews/:id)
+
 ```
 [1] Frontend.Summary
     ↓ GET http://127.0.0.1:3001/interviews/:id
-    
+
 [2] Backend.InterviewsController.getOne()
     ├─ @CurrentUser() validates JWT
     ├─ Validate user owns interview
     └─ Query DB (interviews + questions + answers JOIN)
-    
+
 [3] Backend → Database
     ├─ SELECT * FROM interviews WHERE id = :id
     ├─ SELECT * FROM questions WHERE interview_id = :id
     ├─ SELECT * FROM answers WHERE question_id IN (...)
     └─ Combine results
-    
+
 [4] Backend → Frontend
     ├─ Return interview object:
     │  ├─ id, user_id, status, type, role_name, company
@@ -694,7 +736,7 @@ Return { user, token }
     │     └─ ...
     │  ]
     └─ Status 200 OK
-    
+
 [5] Frontend.Summary Page
     ├─ Render metrics chart (Q1-Q10 scores)
     ├─ Audio player for each answer
@@ -709,10 +751,11 @@ Return { user, token }
 ## 6. ASYNC PROCESSING FLOW (Optional - Admin Features)
 
 ### 6.1 Reprocess Interview Audio (POST /admin/interviews/:id/reprocess-audio)
+
 ```
 [1] Frontend.Admin or Summary (admin user only)
     ↓ POST /admin/interviews/:id/reprocess-audio
-    
+
 [2] Backend.AdminService.reprocessAudio()
     ├─ Load all answers for interview
     ├─ Update interviews.status → 'processing'
@@ -724,16 +767,17 @@ Return { user, token }
     │  └─ Recalculate metrics (WPM, pauses, fillers, silence %)
     ├─ Update interviews.status → 'completed'
     └─ Return summary: { processed_answers: N }
-    
+
 [3] Admin sees progress polling update
     ↓ Completion notification
 ```
 
 ### 6.2 Reprocess Interview Scores (POST /admin/interviews/:id/reprocess-scores)
+
 ```
 [1] Frontend.Admin
     ↓ POST /admin/interviews/:id/reprocess-scores
-    
+
 [2] Backend.AdminService.reprocessScores()
     ├─ Load all answers + questions
     ├─ For each answer:
@@ -744,20 +788,21 @@ Return { user, token }
     ├─ Recalculate overall_score
     ├─ Call POST /evaluate-interview for overall feedback
     └─ Update interviews.total_score + overall_feedback
-    
+
 [3] Return: { processed_answers: N }
 ```
 
 ### 6.3 Stop Processing (POST /admin/interviews/:id/stop-processing)
+
 ```
 [1] Frontend.Admin
     ↓ POST /admin/interviews/:id/stop-processing
-    
+
 [2] Backend.AdminService.stopProcessing()
     ├─ Query interviews WHERE id = :id AND status = 'processing'
     ├─ Update status → 'completed' (incomplete)
     └─ Return status message
-    
+
 [3] Admin sees "processing cancelled" message
 ```
 
@@ -766,6 +811,7 @@ Return { user, token }
 ## 7. TRANSCRIPTION & EVALUATION WORKFLOW
 
 ### 7.1 TRANSCRIPTION PIPELINE (Backend → AI Service)
+
 ```
 ┌─ Backend has WAV file at /uploads/audio/123.wav
 │
@@ -794,6 +840,7 @@ Return { user, token }
 ```
 
 ### 7.2 EVALUATION PIPELINE (Groq LLM)
+
 ```
 ┌─ Backend has transcript from Whisper
 │
@@ -828,6 +875,7 @@ Return { user, token }
 ```
 
 ### 7.3 QUESTION GENERATION PIPELINE (Groq LLM)
+
 ```
 ┌─ Frontend provides context: role, experience, resume, JD, focus_areas
 │
@@ -859,6 +907,7 @@ Return { user, token }
 ```
 
 ### 7.4 INTERVIEW EVALUATION PIPELINE (Groq LLM)
+
 ```
 ┌─ Backend collects all Q&A pairs after completion
 │
@@ -928,38 +977,39 @@ Return { user, token }
 
 ## 9. TECHNOLOGY MATRIX
 
-| Component | Layer | Technology | Purpose |
-|-----------|-------|-----------|---------|
-| Frontend | UI | React 19 | UI framework |
-| Frontend | Build | Vite | Fast bundler |
-| Frontend | Routing | React Router 7 | Navigation |
-| Frontend | Icons | Lucide React | UI icons |
-| Frontend | APIs | MediaRecorder, getUserMedia | Audio/video recording |
-| Frontend | HTTP | Fetch API | API calls |
-| Backend | Runtime | NestJS 11 | Application framework |
-| Backend | Language | TypeScript | Type-safe backend |
-| Backend | Express | Express (via NestJS) | HTTP server |
-| Backend | Database | MySQL2/Promise | Database client |
-| Backend | Auth | JWT | Session tokens |
-| Backend | Auth | bcrypt | Password hashing |
-| Backend | Files | Multer | File upload |
-| Backend | Processes | child_process | Python subprocess |
-| AI Service | Runtime | FastAPI | Python web framework |
-| AI Service | Server | Uvicorn | ASGI server |
-| AI Service | STT | Faster-Whisper | Local transcription |
-| AI Service | LLM | Groq API | Cloud inference |
-| AI Service | Validation | Pydantic | Data validation |
-| Database | Engine | MySQL 8.0 | SQL database |
-| Storage | Media | Filesystem | Audio/video files |
-| External | LLM | Groq (Cloud) | Question generation, scoring |
-| Optional | Subprocess | Python (stt.py) | Backup transcription |
-| Optional | Video | FFmpeg | Video conversion |
+| Component  | Layer      | Technology                  | Purpose                      |
+| ---------- | ---------- | --------------------------- | ---------------------------- |
+| Frontend   | UI         | React 19                    | UI framework                 |
+| Frontend   | Build      | Vite                        | Fast bundler                 |
+| Frontend   | Routing    | React Router 7              | Navigation                   |
+| Frontend   | Icons      | Lucide React                | UI icons                     |
+| Frontend   | APIs       | MediaRecorder, getUserMedia | Audio/video recording        |
+| Frontend   | HTTP       | Fetch API                   | API calls                    |
+| Backend    | Runtime    | NestJS 11                   | Application framework        |
+| Backend    | Language   | TypeScript                  | Type-safe backend            |
+| Backend    | Express    | Express (via NestJS)        | HTTP server                  |
+| Backend    | Database   | MySQL2/Promise              | Database client              |
+| Backend    | Auth       | JWT                         | Session tokens               |
+| Backend    | Auth       | bcrypt                      | Password hashing             |
+| Backend    | Files      | Multer                      | File upload                  |
+| Backend    | Processes  | child_process               | Python subprocess            |
+| AI Service | Runtime    | FastAPI                     | Python web framework         |
+| AI Service | Server     | Uvicorn                     | ASGI server                  |
+| AI Service | STT        | Faster-Whisper              | Local transcription          |
+| AI Service | LLM        | Groq API                    | Cloud inference              |
+| AI Service | Validation | Pydantic                    | Data validation              |
+| Database   | Engine     | MySQL 8.0                   | SQL database                 |
+| Storage    | Media      | Filesystem                  | Audio/video files            |
+| External   | LLM        | Groq (Cloud)                | Question generation, scoring |
+| Optional   | Subprocess | Python (stt.py)             | Backup transcription         |
+| Optional   | Video      | FFmpeg                      | Video conversion             |
 
 ---
 
 ## 10. KEY INTEGRATION POINTS
 
 ### Authentication Boundary
+
 ```
 Unauthenticated:
 ├─ POST /auth/signup
@@ -987,6 +1037,7 @@ Admin-only:
 ```
 
 ### File Storage Paths
+
 ```
 /uploads/
 ├── audio/
@@ -998,6 +1049,7 @@ Admin-only:
 ```
 
 ### Environment Variables (Critical)
+
 ```
 BACKEND:
 ├─ DATABASE_HOST, DATABASE_USER, DATABASE_PASSWORD, DATABASE_NAME
@@ -1023,12 +1075,14 @@ FRONTEND:
 ## 11. DEPLOYMENT & SCALABILITY
 
 ### Current Architecture
+
 - **Monolith-ish:** Single machine (Frontend + Backend + AI Service + DB)
 - **Local-first:** No cloud services required (except Groq, optional)
 - **Stateless Backend:** Can scale horizontally with shared MySQL
 - **Stateless AI Service:** Can scale horizontally (independent Whisper instances)
 
 ### Scaling Opportunities
+
 ```
 Horizontal Scaling:
 ├─ Frontend: CDN + static hosting
@@ -1052,17 +1106,17 @@ Caching Layer (Future):
 
 ## 12. ERROR HANDLING MATRIX
 
-| Scenario | Component | Response | Recovery |
-|----------|-----------|----------|----------|
-| Groq API down | AI Service | 503 Service Unavailable | Use local Whisper, score = 0 |
-| Groq Rate Limit | AI Service | 503 (reworded) | Retry later, show user message |
-| Groq Timeout | AI Service | 504 Gateway Timeout | Timeout after 30s, skip scoring |
-| JWT Expired | Backend | 401 Unauthorized | Frontend clears token, redirect login |
-| Database down | Backend | 503 Service Unavailable | Retry, show system error |
-| Audio file missing | Backend | 500 Internal Error | Fallback to empty metrics |
-| Whisper timeout | AI Service | 504 | Return empty transcript |
-| No audio in file | AI Service | 200 OK | Return empty transcript + zero metrics |
-| CUDA unavailable | AI Service | Fallback to CPU (int8) | Auto-handled, no error |
+| Scenario           | Component  | Response                | Recovery                               |
+| ------------------ | ---------- | ----------------------- | -------------------------------------- |
+| Groq API down      | AI Service | 503 Service Unavailable | Use local Whisper, score = 0           |
+| Groq Rate Limit    | AI Service | 503 (reworded)          | Retry later, show user message         |
+| Groq Timeout       | AI Service | 504 Gateway Timeout     | Timeout after 30s, skip scoring        |
+| JWT Expired        | Backend    | 401 Unauthorized        | Frontend clears token, redirect login  |
+| Database down      | Backend    | 503 Service Unavailable | Retry, show system error               |
+| Audio file missing | Backend    | 500 Internal Error      | Fallback to empty metrics              |
+| Whisper timeout    | AI Service | 504                     | Return empty transcript                |
+| No audio in file   | AI Service | 200 OK                  | Return empty transcript + zero metrics |
+| CUDA unavailable   | AI Service | Fallback to CPU (int8)  | Auto-handled, no error                 |
 
 ---
 

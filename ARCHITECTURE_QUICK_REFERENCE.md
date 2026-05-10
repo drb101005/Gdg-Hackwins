@@ -3,6 +3,7 @@
 ## 🏗️ SYSTEM COMPONENTS AT A GLANCE
 
 ### TIER 1: PRESENTATION (Frontend)
+
 ```
 Technology: React 19 + Vite
 Port: 5173 (dev), 3000 (prod)
@@ -24,6 +25,7 @@ Browser APIs Used:
 ```
 
 ### TIER 2: APPLICATION (Backend)
+
 ```
 Technology: NestJS 11 + TypeScript
 Port: 3001
@@ -45,6 +47,7 @@ Key Services:
 ```
 
 ### TIER 3: AI INTELLIGENCE (AI Service)
+
 ```
 Technology: FastAPI (Python)
 Port: 8000
@@ -70,6 +73,7 @@ Core Services:
 ```
 
 ### TIER 4: DATA PERSISTENCE (Database)
+
 ```
 Technology: MySQL 8.0
 Port: 3306
@@ -88,6 +92,7 @@ Indexes: On email, user_id, interview_id, status, created_at
 ```
 
 ### TIER 5: STORAGE (Filesystem)
+
 ```
 Path: /uploads/
 Purpose: Store audio/video files locally
@@ -105,6 +110,7 @@ Why Local?
 ```
 
 ### EXTERNAL INTEGRATIONS
+
 ```
 Groq API (Cloud)
 ├─ Purpose: LLM inference (question gen, scoring)
@@ -131,8 +137,9 @@ FFmpeg (Optional)
 ## 🔄 REQUEST FLOW SUMMARY
 
 ### CREATE INTERVIEW
+
 ```
-Frontend (form) 
+Frontend (form)
   → POST /interviews (role, resume, JD, focus_areas)
   → Backend validates + inserts interview row
   → Backend calls AI Service → /generate-questions
@@ -143,6 +150,7 @@ Frontend (form)
 ```
 
 ### SUBMIT ANSWER
+
 ```
 Frontend (record audio/video)
   → WAV/WebM files
@@ -158,6 +166,7 @@ Frontend (record audio/video)
 ```
 
 ### COMPLETE INTERVIEW
+
 ```
 All 10 answers submitted
   → POST /interviews/:id/complete
@@ -170,6 +179,7 @@ All 10 answers submitted
 ```
 
 ### REPROCESS (Admin)
+
 ```
 POST /admin/interviews/:id/reprocess-audio
   → Re-run Whisper on all answers
@@ -187,6 +197,7 @@ POST /admin/interviews/:id/reprocess-scores
 ## 🔐 AUTHENTICATION & AUTHORIZATION
 
 ### Signup Flow
+
 ```
 Email + Password + Security Q&A
   → Hash password (bcrypt, 10 rounds)
@@ -199,6 +210,7 @@ Email + Password + Security Q&A
 ```
 
 ### JWT Token Structure
+
 ```
 Header:   { alg: "HS256", typ: "JWT" }
 Payload:  { sub: user_id, email, role, iat, exp }
@@ -207,19 +219,21 @@ Secret:   JWT_SECRET (env var)
 ```
 
 ### Protected Routes
+
 ```
 Header: Authorization: Bearer <JWT>
   → JwtAuthGuard validates signature
   → Extract user_id from payload
   → Attach user to request context
   → Allow access to controller
-  
+
 Invalid/Expired → 401 Unauthorized
   → Clear token (frontend)
   → Redirect to /login
 ```
 
 ### Role-Based Access (Admin)
+
 ```
 @UseGuards(JwtAuthGuard, AdminGuard)
   → Check user.role === 'admin'
@@ -233,6 +247,7 @@ Invalid/Expired → 401 Unauthorized
 ## 🌐 API ENDPOINTS SUMMARY
 
 ### PUBLIC (No Auth)
+
 ```
 POST   /auth/signup                      (Create account)
 POST   /auth/login                       (Login)
@@ -242,6 +257,7 @@ GET    /health                           (System status)
 ```
 
 ### AUTHENTICATED (JWT Required)
+
 ```
 GET    /auth/me                          (Current user)
 PATCH  /auth/me                          (Update profile)
@@ -256,6 +272,7 @@ GET    /interviews/analytics/summary     (Analytics stats)
 ```
 
 ### ADMIN ONLY
+
 ```
 GET    /admin/overview                   (User + interview overview)
 POST   /admin/reprocess-interviews       (Batch reprocess all)
@@ -265,6 +282,7 @@ POST   /admin/interviews/:id/stop-processing   (Cancel in-flight)
 ```
 
 ### TESTING
+
 ```
 POST   /testing/transcription            (Test Whisper)
 POST   /testing/questions                (Test Groq Q-gen)
@@ -277,6 +295,7 @@ POST   /testing/static-answer-text       (Test text scoring)
 ## 📊 DATABASE SCHEMA QUICK VIEW
 
 ### USERS
+
 ```
 PK: id (UUID)
 Unique: email
@@ -287,6 +306,7 @@ Created: created_at (TIMESTAMP)
 ```
 
 ### INTERVIEWS
+
 ```
 PK: id (UUID)
 FK: user_id → users(id)
@@ -300,6 +320,7 @@ Index: (user_id, status, created_at)
 ```
 
 ### QUESTIONS
+
 ```
 PK: id (UUID)
 FK: interview_id → interviews(id)
@@ -309,6 +330,7 @@ Index: (interview_id, order_index)
 ```
 
 ### ANSWERS
+
 ```
 PK: id (UUID)
 FK: question_id → questions(id)
@@ -327,6 +349,7 @@ Index: (question_id, created_at)
 ## 🚀 ENVIRONMENT VARIABLES REQUIRED
 
 ### Backend (.env)
+
 ```
 DATABASE_HOST=127.0.0.1
 DATABASE_PORT=3306
@@ -341,6 +364,7 @@ AI_SERVICE_URL=http://127.0.0.1:8000
 ```
 
 ### AI Service (.env)
+
 ```
 GROQ_API_KEY=your-groq-api-key          (optional)
 GROQ_SCORING_MODEL=llama-3.3-70b-versatile
@@ -354,6 +378,7 @@ LOCAL_WHISPER_MAX_UPLOAD_BYTES=15728640 (15MB)
 ```
 
 ### Frontend (.env.local)
+
 ```
 VITE_API_BASE=http://127.0.0.1:3001
 ```
@@ -363,6 +388,7 @@ VITE_API_BASE=http://127.0.0.1:3001
 ## 🔌 INTER-SERVICE COMMUNICATION
 
 ### Frontend → Backend
+
 ```
 Base URL: ${VITE_API_BASE}
 Protocol: HTTP/HTTPS
@@ -372,6 +398,7 @@ Timeout: 12s default (up to 120s for long ops)
 ```
 
 ### Backend → AI Service
+
 ```
 Base URL: ${AI_SERVICE_URL}
 Protocol: HTTP/HTTPS
@@ -381,6 +408,7 @@ Fallback: If unavailable, score=0 (graceful degradation)
 ```
 
 ### Backend → Database
+
 ```
 Protocol: TCP (MySQL)
 Connection Pool: 10 (configurable)
@@ -389,6 +417,7 @@ Prepared Statements: Prevent SQL injection
 ```
 
 ### Backend → Python (Optional)
+
 ```
 Subprocess: spawn("python", ["stt.py", "transcribe-file", path])
 Communication: stdout/stderr (JSON)
@@ -401,6 +430,7 @@ Fallback: If FastAPI available, use instead
 ## ⚡ PERFORMANCE CHARACTERISTICS
 
 ### Response Times (Typical)
+
 ```
 Frontend → Backend HTTP:     ~50-200ms (local network)
 Backend → AI Service:        ~10-50ms (local or Docker)
@@ -413,6 +443,7 @@ Total per answer:            ~10-50 seconds
 ```
 
 ### Throughput
+
 ```
 Concurrent users:    Limited by connection pool (10) and DB
 Max parallel uploads: Limited by Multer buffer
@@ -421,6 +452,7 @@ Groq API:            Quota-limited (check plan)
 ```
 
 ### Storage
+
 ```
 Audio per answer:    ~500KB-5MB (depends on duration, codec)
 Video per answer:    ~5-50MB (depends on duration, resolution)
@@ -435,6 +467,7 @@ Total per interview: ~50-100MB (10 answers + metadata)
 ### By Component
 
 **Frontend**
+
 ```
 Network error     → Show banner "Unable to reach backend"
 Timeout           → Show banner "Request timed out"
@@ -443,6 +476,7 @@ Server error (5xx) → Show generic error + message
 ```
 
 **Backend → Groq**
+
 ```
 Rate limit (429)  → Return 503 "Quota exhausted"
 Timeout (408)     → Return 504 "Timed out"
@@ -451,6 +485,7 @@ No API key        → Return 503, skip AI (continue locally)
 ```
 
 **Backend → Database**
+
 ```
 Connection failed → Return 503 Service Unavailable
 Query error       → Return 500 Internal Server Error
@@ -458,6 +493,7 @@ Constraint error  → Return 400 Bad Request
 ```
 
 **Backend → LocalStt (Python)**
+
 ```
 Script not found  → Return 503 Service Unavailable
 Process timeout   → Return 504 Gateway Timeout
@@ -468,23 +504,24 @@ Exit code ≠ 0    → Return 500 Internal Server Error
 
 ## 🎯 KEY ARCHITECTURE DECISIONS
 
-| Decision | Rationale | Trade-off |
-|----------|-----------|-----------|
-| **3-Tier Separation** | Scalability, modularity | Added complexity |
-| **Local Whisper** | Privacy, offline capability | CUDA setup needed |
-| **Groq LLM** | Fast, quality inference | Cost per token |
-| **MySQL (not NoSQL)** | ACID, relational data | Schema rigidity |
-| **JWT (not session)** | Stateless, scalable | No server-side revocation |
-| **Polling (not WebSocket)** | Simpler, HTTP-only | Higher latency |
-| **Async processing** | Non-blocking UX | Eventual consistency |
-| **Word timestamps** | Precise metrics | Extra Whisper complexity |
-| **Local file storage** | Privacy, no cloud cost | Manual backup needed |
+| Decision                    | Rationale                   | Trade-off                 |
+| --------------------------- | --------------------------- | ------------------------- |
+| **3-Tier Separation**       | Scalability, modularity     | Added complexity          |
+| **Local Whisper**           | Privacy, offline capability | CUDA setup needed         |
+| **Groq LLM**                | Fast, quality inference     | Cost per token            |
+| **MySQL (not NoSQL)**       | ACID, relational data       | Schema rigidity           |
+| **JWT (not session)**       | Stateless, scalable         | No server-side revocation |
+| **Polling (not WebSocket)** | Simpler, HTTP-only          | Higher latency            |
+| **Async processing**        | Non-blocking UX             | Eventual consistency      |
+| **Word timestamps**         | Precise metrics             | Extra Whisper complexity  |
+| **Local file storage**      | Privacy, no cloud cost      | Manual backup needed      |
 
 ---
 
 ## 📈 SCALING ROADMAP
 
 ### Phase 1: Horizontal (Current)
+
 ```
 Frontend:   Vite build → static hosting (CDN)
 Backend:    Load balancer + multiple instances (shared DB)
@@ -493,6 +530,7 @@ Database:   Single master (but pooled)
 ```
 
 ### Phase 2: Caching & Optimization
+
 ```
 Redis:           JWT token blacklist, question cache
 CDN:             Audio/video media distribution
@@ -500,6 +538,7 @@ DB Replication:  Read replicas for analytics
 ```
 
 ### Phase 3: Advanced
+
 ```
 Async Queue:     Celery/RabbitMQ for heavy tasks
 Microservices:   Separate auth, interviews, scoring services
